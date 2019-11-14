@@ -1,0 +1,65 @@
+#!/bin/sh -e
+
+# Requires: mktemp(1), mv(1), openssl(1)
+
+# Usage: valid_file <file>
+valid_file()
+{
+	local func="${FUNCNAME:-valid_file}"
+
+	local file="${1:?missing 1st arg to ${func}() (<file>)}"
+
+	[ -f "${file}" -a -s "${file}" -a -r "${file}" ]
+}
+
+# Usage: error <fmt> ...
+error()
+{
+	local rc=$?
+
+	local func="${FUNCNAME:-error}"
+
+	local fmt="${1:?missing 1st arg to ${func}() (<fmt>)}"
+	shift
+
+	printf -- "${fmt}" "$@" >&2
+
+	return $rc
+}
+
+################################################################################
+
+prog_name="${0##*/}"
+
+if [ $# -ne 1 ]; then
+	printf >&2 -- 'Usage: %s <private_key_file.key>\n' "${prog_name}"
+	exit 1
+fi
+
+# private key
+pk_key="$1"
+valid_file "${pk_key}" || \
+	error '%s: no valid private key (pkey) file "%s" found\n' \
+		"${prog_name}" "${pk_key}" || \
+	exit
+
+# Make temporary file to output unencrypted private key (pkey)
+pk_tmp_key="${pk_tmp##*/*}"
+pk_key_tmp="$(mktemp ${pk_tmp_key:+-t} "${pk_key}.XXXXXXXX")" || \
+	error '%s: creating temporary file "%s" to output pkey failed\n' \
+		"${prog_name}" "${pk_key}" || \
+	exit
+
+# Decrypt private key (pkey)
+openssl pkey -in "${pk_key}" -out "${pk_key_tmp}" || \
+	error '%s: decryption pkey with openssl(1) failed\n' \
+		"${prog_name}" || \
+	exit
+
+# Replace original encrypted private key (pkey) file with new unencrypted one
+mv -f "${pk_key_tmp}" "${pk_key}" || \
+	error '%s: replacing "%s" with "%s" failed\n' \
+		"${prog_name}" "${pk_key}" "${pk_key_tmp}" || \
+	exit
+
+:

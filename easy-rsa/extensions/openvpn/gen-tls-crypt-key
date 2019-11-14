@@ -1,0 +1,4 @@
+#!/bin/sh -e
+
+TC_KEY="${OVPN_CONFIGS_DIR:-.}/tc.key"
+openvpn --genkey --secret "$TC_KEY" && chmod go+r "$TC_KEY"

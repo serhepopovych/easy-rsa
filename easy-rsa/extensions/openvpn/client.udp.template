@@ -1,0 +1,41 @@
+#
+# All paths in this configuration file assume "--cd" OpenVPN option is given
+# on command line and points to directory with this configuration file.
+#
+# For example you can run openvpn(8) with following command line assuming your
+# PWD points to directory with "%config%" file:
+#
+#  # openvpn --cd "${PWD}" --config "%config%"
+#
+# Make all necessay adjustments to config to reflect target system layout.
+#
+
+# This is client config: do not bind for particular address/port.
+client
+nobind
+
+# Basic settings
+proto udp
+port %port%
+dev-type tun
+dev tun
+
+remote %remote%
+
+# Enable adaptive LZO compression
+comp-lzo adaptive
+
+# Notify server on exit/restart (udp only, no need for tcp)
+explicit-exit-notify
+
+# Do not cache credentials
+auth-nocache
+
+# HMAC algo to authenticate packets
+auth SHA256
+
+# Default cipher is AES256 in CBC mode
+cipher AES-256-CBC
+
+# Optionally set NCP cipher list to negotiate
+setenv opt ncp-ciphers AES-256-GCM

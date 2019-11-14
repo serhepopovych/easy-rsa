@@ -1,0 +1,153 @@
+#!/bin/sh -ue
+
+# Usage: exec-ca [NAME=VAL...] [options] [--] <ca> <command> [<args>...]
+
+# Executing from initialized, possibly different, CA environment
+[ -z "${KEY_DIR-}" ] || IN_EXEC_CA=''
+
+if [ -z "${IN_EXEC_CA-}" ]; then
+	usage()
+	{
+		local rc=$?
+		local fd
+
+		[ $rc -eq 0 ] && fd=1 || fd=2
+
+		cat >&$fd <<EOF
+usage: $0 [NAME=VAL...] [options] [--] <ca> <command> [<args> ...]
+
+  options : options for exec-ca
+
+    --runas   run as specified user instead of current (i.e. \$USER)
+    --help|--usage
+              this help message
+    --version this program version
+
+  ca      : the CA directory (KEY_DIR) of the PKI to run command on
+  command : command to run with PKI environment read from vars-<ca>
+  args    : (optional) arguments to <command>
+
+Example: $0 webCA build-ca (build webCA)
+         $0 webCA (execute \$SHELL with environment from vars-webCA)
+EOF
+		return $rc
+	}
+	trap 'usage' EXIT
+
+	env_vars=''
+
+	# Add from command line
+	while [ $# -gt 0 ]; do
+		case "$1" in
+			*=env:*)
+				# Note that env(1) is not ready for this
+				eval "env_vars=\"\${env_vars} '\$${1#*=env:}'\""
+				;;
+			*=*)
+				env_vars="${env_vars} '$1'"
+				;;
+			--runas)
+				shift && runas="$1"
+				;;
+			--help|--usage)
+				exit
+				;;
+			--version)
+				version=1
+				break
+				;;
+			--)
+				shift
+				break
+				;;
+			# errors
+			--*)
+				printf -- '%s: unknown option: %s\n' "$0" "$1"
+				trap - EXIT
+				exit 1
+				;;
+			*)
+				break
+				;;
+		esac
+		shift
+	done
+	[ $# -gt 0 ] || exit
+
+	IN_EXEC_CA="$1" && shift
+
+	# Finish argument parsing
+	trap - EXIT
+
+	# Try to determine EASY_RSA
+	if [ -z "${EASY_RSA-}" ]; then
+		EASY_RSA="$(readlink -qf "$0" 2>/dev/null)" || EASY_RSA="$0"
+		EASY_RSA="${EASY_RSA%/*}"
+		if [ ! -f "$EASY_RSA/easy-rsa-lib.sh" ]; then
+			printf >&2 -- '%s: cannot find easy-rsa location\n' "$0"
+			exit 1
+		fi
+	fi
+
+	# Change to EASY_RSA
+	if [ ! -d "$EASY_RSA" ]; then
+		printf >&2 -- '%s: EASY_RSA ("%s") is not a directory\n' \
+			"$0" "$EASY_RSA"
+		exit 1
+	fi
+
+	# Source functions library
+	KEY_DIR='dummy' . "$EASY_RSA/easy-rsa-lib.sh"
+
+	# Print version if requested
+	if [ -n "${version+x}" ]; then
+		echo "(easy-rsa) $prog_name $prog_version"
+		exit 0
+	fi
+
+	# Re-exec itself with clean environment
+	eval env_exec ${runas:+--runas '$runas'} \
+		"IN_EXEC_CA='$IN_EXEC_CA'" \
+		"EASY_RSA='$EASY_RSA'" \
+		${env_vars} \
+		-- '"$0"' '"$@"'
+else
+	# Per user configuration
+	export VARS_DIR=${VARS_DIR:-~/easy-rsa}
+	export VARS_FILE="$VARS_DIR/vars-$IN_EXEC_CA"
+
+	if ! . "$VARS_FILE"; then
+		printf >&2 -- '%s: source vars ("%s") file failed\n' \
+		    "$0" "$VARS_FILE"
+		exit 1
+	fi
+
+	if [ -n "$CA_PASSPHRASE" ]; then
+		if m="$(stat -c '0%a' "$VARS_FILE")" && [ "$m" -ne 0600 ]; then
+			cat >&2 <<EOF
+$0: vars ("$VARS_FILE") file specifies CA private key passphrase and must
+have 0600 permissions to be readable only by owner (and root)!'
+EOF
+			exit 1
+		fi
+		unset m
+	fi
+
+	# Command to run with CA environment or $SHELL if no command is given
+	if [ $# -eq 0 ]; then
+		command="${SHELL:-/bin/sh}"
+		# Standard POSIX compatible PS1
+		export PS1="easy-rsa:$IN_EXEC_CA> "
+	else
+		command="$1"
+		shift
+	fi
+
+	# Update PATH with EASY_RSA directory at the top
+	PATH="$EASY_RSA:$EASY_RSA/extensions/xbin:$PATH"
+
+	# Change working directory to $VARS_DIR
+	cd "$VARS_DIR" ||:
+
+	exec "$command" "$@"
+fi

@@ -1,0 +1,257 @@
+#!/bin/sh
+
+# Use sane PATH
+export PATH='/sbin:/usr/sbin:/bin:/usr/bin'
+
+# This going to be run periodically (e.g. using crond(8)).
+
+# Requires: awk(1), sed(1), tr(1), cat(1), mv(1), rm(1), chmod(1),
+#           mktemp(1), install(1), wget(1), cmp(1), c_rehash(1)
+
+# CA files we updating
+CA_FILES='ca.crt crl.pem'
+
+# Add CA's we managed to the list below. At least <CA>_URL
+# and <CA>_PATH should be defined. Note that <CA> will
+# be sanitized by replacing all non-matching [^[:alnum:]_]
+# characters with '_' to make name shell-friendly.
+#MANAGED_CA='%ca%'
+
+## %ca%
+#%CA%_URL='%CA_URL%'
+#%CA%_PATH='%CA_PATH%'
+
+# Add any security sensitive options (e.g. --http-user and
+# --http-password) using ~/.wgetrc or ~/.netrc.
+#
+# If CA data served using HTTPS with certificate issued by
+# own CA (e.g. one whose data is served) you should install
+# that CA certificates chain to system wide location or
+# use --ca-certificate or --ca-directory options to tell
+# wget(1) about that CA(s).
+#
+# It is not recommended to use --no-check-certificate in
+# production environments too.
+#
+# See wget(1) for more information on available options.
+WGET_OPTS='--tries=5 --timeout=30 --prefer-family=IPv4'
+
+# Event handlers
+
+# Usage: on_success <ca> <url> <path>
+on_success()
+{
+	local instance instances
+
+	case "$1" in
+		%ca%) instances="${instances} %ca%" ;;
+		*) return ;;
+	esac
+
+	for instance in ${instances}; do
+		# Example for OpenVPN server:
+		#
+		#  systemctl restart "openvpn-server@${instance}" ||:
+		#
+		# Restart OpenVPN server to force client reconnects
+		# to check their certificates against updated CRL:
+		:
+	done
+}
+
+# Usage: on_failure <ca> <url> <path>
+on_failure()
+{
+	:
+}
+
+################################################################################
+
+# Program (script) name
+prog_name="${0##*/}"
+
+# Usage: unmake_bundle <dir> <file> <bundle>
+unmake_bundle()
+{
+	local func="${FUNCNAME:-pop_dir}"
+
+	local dir="${1:?missing 1st arg to ${func}() (<dir>)}"
+	local file="${2:?missing 2d arg to ${func}() (<file>)}"
+	local bundle="${3:?missing 3d arg to ${func}() (<bundle>)}"
+
+	local rc=0 oldpwd="${PWD}" f
+
+	cd "${dir}" || return
+
+	# rfc7468
+	# 2. General considerations
+	awk -vc=0 -vfile="${file}" '
+		/^-----BEGIN [A-Z0-9 ]+-----$/ {c++}
+		{print > file c ".pem"}' \
+		"${bundle}" || rc=$?
+
+	cd "${oldpwd}" ||:
+
+	return $rc
+}
+
+# Usage: make_envvar_name() <str> [<var_result>]
+make_envvar_name()
+{
+	local func="${FUNCNAME:-make_envvar_name}"
+
+	local men_str="${1:?missing 1st arg to ${func}() (<str>)}"
+	local men_var_result="$2"
+
+	men_str="$(
+		echo "${men_str}" |
+		sed -e 's/\W/_/g' |
+		tr '[:lower:]' '[:upper:]'
+	)"
+
+	if [ -n "${men_var_result}" ]; then
+		eval "${men_var_result}='${men_str}'"
+	else
+		echo "${men_str}"
+	fi
+}
+
+# Usage: managed_var_value() <ca> <suffix> [<var_result>]
+managed_var_value()
+{
+	local func="${FUNCNAME:-managed_var_value}"
+
+	local mvv_ca="${1:?missing 1st arg to ${func}() (<ca>)}"
+	local mvv_suffix="${2:?missing 1st arg to ${func}() (<suffix>)}"
+	local mvv_var_result="$3"
+
+	local mvv_var mvv_val
+
+	make_envvar_name "${mvv_ca}" mvv_var || return
+	mvv_var="${mvv_var}_${mvv_suffix}"
+
+	eval "mvv_val=\"\$${mvv_var}\""
+	if [ -z "${mvv_val}" ]; then
+		printf >&2 -- '%s: "%s" is empty\n' \
+			"${func}" "${mvv_var}"
+		return 1
+	fi
+
+	if [ -n "${mvv_var_result}" ]; then
+		eval "${mvv_var_result}='${mvv_val}'"
+	else
+		echo "${mvv_val}"
+	fi
+}
+
+# Usage: make_readme <path>
+make_readme()
+{
+	local func="${FUNCNAME:-make_readme}"
+
+	local path="${1:?missing 1st arg to ${func}() (<path>)}"
+
+	cat >"${path}/README" <<EOF
+This directory updated periodically with "${prog_name}" utility using
+c_rehash(1). Do not add/modify CA or CRLs as well as any other file(s)
+here since they will be lost on next "${prog_name}" run.
+EOF
+}
+
+# Usage: do_update_capath <ca> <url> <path> <files...>
+do_update_capath()
+{
+	local func="${FUNCNAME:-do_update_ca}"
+
+	local ca="${1:?missing 1st arg to ${func}() (<ca>)}"
+	local url="${2:?missing 2d arg to ${func}() (<url>)}"
+	local path="${3:?missing 3rd arg to ${func}() (<path>)}"
+	shift 3
+
+	local rc=0 tmp_path f f_tmp updated=''
+
+	url="${url%/}" && [ -n "${url}" ] || return
+	path="${path%/}" && [ -d "${path}" ] || return
+
+	tmp_path="$(mktemp -d "${path}.XXXXXXXX")" || return
+
+	# c_rehash(1) has bug in regular expression matching file
+	# extensions: put our bundle certificates to separate subdir
+	# instead of changing their extensions.
+	install -d "${tmp_path}/bundle" || rc=$?
+
+	if [ $rc -eq 0 ]; then
+		for f in "$@"; do
+			f_tmp="${tmp_path}/bundle/${f}"
+
+			# Fetch file
+			wget ${WGET_OPTS} -O "${f_tmp}" "${url}/${f}" || rc=$?
+			[ $rc -eq 0 ] || break
+
+			# At least one bundle updated
+			[ -z "${updated}" ] || continue
+			cmp -s "${f_tmp}" "${path}/bundle/${f}" || updated='y'
+		done
+
+		[ $rc -eq 0 ] || updated=''
+	fi
+
+	if [ -n "${updated}" ]; then
+		for f in "$@"; do
+			f_tmp="${tmp_path}/bundle/${f}"
+
+			# Unbundle file
+			f="${f%.*}"
+
+			unmake_bundle "${tmp_path}" "${f}" "${f_tmp}" || rc=$?
+			[ $rc -eq 0 ] || break
+		done
+
+		if [ $rc -eq 0 ]; then
+			# Rehash new files in temporary directory
+			c_rehash "${tmp_path}" || rc=$?
+		fi
+
+		[ $rc -eq 0 ] || updated=''
+	fi
+
+	if [ -n "${updated}" ]; then
+		# Move original directory to temporary one, if exists
+		[ ! -d "${path}" ] || mv -f "${path}" "${tmp_path}" || rc=$?
+
+		if [ $rc -eq 0 ]; then
+			# Rename temporary directory to original
+			mv -f "${tmp_path}" "${path}" &&
+			chmod -f a+rx "${path}" || rc=$?
+
+			if [ $rc -eq 0 ]; then
+				# Remove old original on success
+				rm -rf "${path}/${path##*/}/" ||:
+				# Add README with notes on contents volatility
+				make_readme "${path}" ||:
+				# Trigger 'on success' event
+				on_success "${ca}" "${url}" "${path}" ||:
+			else
+				# Restore old original on failure
+				mv -f "${tmp_path}/${path##*/}" "${path}" ||:
+				# Trigger 'on failure' event
+				on_failure "${ca}" "${url}" "${path}" ||:
+			fi
+		fi
+	fi
+
+	rm -rf "${tmp_path}" ||:
+
+	return $rc
+}
+
+for ca in ${MANAGED_CA}; do
+	# <CA>_URL
+	managed_var_value "${ca}" 'URL' url || exit
+	# <CA>_PATH
+	managed_var_value "${ca}" 'PATH' path || exit
+
+	if ! do_update_capath "${ca}" "${url}" "${path}" ${CA_FILES}; then
+		printf >&2 -- '%s: failed to update "%s" CA\n' "$0" "${ca}"
+	fi
+done

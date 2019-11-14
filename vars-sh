@@ -1,0 +1,6 @@
+
+# Project data
+DESTS='/easy-rsa'
+
+# Inherit subproject(s) variables
+inherit 'installsh/vars-sh'

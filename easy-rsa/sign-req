@@ -1,0 +1,14 @@
+#!/bin/sh
+
+# Sign a certificate signing request (a .csr file)
+# with a local root certificate and key.
+
+if [ -z "$IN_EXEC_CA" ]; then
+	printf >&2 -- '%s: run with "exec-ca" prepared environment\n' "$0"
+	exit 1
+fi
+
+# Source functions library
+. "$EASY_RSA/easy-rsa-lib.sh"
+
+exec "$EASY_RSA/pkitool" --interact --sign "$@"

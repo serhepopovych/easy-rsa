@@ -1,0 +1,135 @@
+#!/bin/sh -e
+
+# Requires: mv(1), rm(1), install(1), chmod(1), sed(1), tr(1), date(1), cmp(1)
+
+if [ -z "${IN_EXEC_CA-}" ]; then
+	# Try to determine EASY_RSA
+	if [ -z "${EASY_RSA-}" ]; then
+		EASY_RSA="$(readlink -qf "$0" 2>/dev/null)" || EASY_RSA="$0"
+		EASY_RSA="${EASY_RSA%/*}"
+		if [ ! -f "$EASY_RSA/easy-rsa-lib.sh" ]; then
+			printf >&2 -- '%s: cannot find easy-rsa location\n' "$0"
+			exit 1
+		fi
+	fi
+
+	# Change to EASY_RSA
+	if [ ! -d "$EASY_RSA" ]; then
+		printf >&2 -- '%s: EASY_RSA ("%s") is not a directory\n' \
+			"$0" "$EASY_RSA"
+		exit 1
+	fi
+
+	# Source functions library
+	KEY_DIR='dummy' . "$EASY_RSA/easy-rsa-lib.sh"
+
+	# Try to update-index-txt for each non-system user CAs
+	for_each_user_ca "$@"
+
+	# Exit
+	exit
+fi
+
+# Per user configuration
+export VARS_DIR=${VARS_DIR:-~/easy-rsa}
+export VARS_FILE="$VARS_DIR/vars-$IN_EXEC_CA"
+
+if ! . "$VARS_FILE"; then
+	printf >&2 -- '%s: source vars ("%s") file failed\n' \
+		"$0" "$VARS_FILE"
+	exit 1
+fi
+
+# Change working directory to KEY_DIR
+cd "$KEY_DIR" ||:
+
+# Source functions library
+. "$EASY_RSA/easy-rsa-lib.sh"
+
+# index.txt
+index_txt="$KEY_DIR/index.txt"
+[ -s "$index_txt" ] || exit
+index_txt_tmp="$(mktemp "$index_txt.XXXXXXXX")" || exit
+
+# expired/index.txt
+KEY_DIR_EXPIRED="$KEY_DIR/expired"
+index_txt_expired="$KEY_DIR_EXPIRED/index.txt"
+
+exit_handler()
+{
+	set +e
+
+	rm -f "$index_txt_tmp"
+}
+trap 'exit_handler' EXIT
+
+install -d "$KEY_DIR_EXPIRED" ||:
+
+# Usage: cb <line> \                      # $1
+#	    <status> \                    # $2
+#	    <expires> <expires_days> \    # $3 $4
+#	    <revoked> <revoked_reason> \  # $5 $6
+#	    <serial> \                    # $7
+#	    <filename> \                  # $8
+#	    <dn>                          # $9
+cb()
+{
+	local line="$1"
+	local expires_days="$4"
+
+	if [ $expires_days -ge 0 ]; then
+		echo "$line" >>"$index_txt_tmp"
+		return
+	fi
+
+	local serial="$7"
+	# <serial>.pem if 'unknown' or specific name from index.txt
+	local pem="$(ossl_index_txt_filename "$serial" "$8")"
+
+	# Common Name from Distinguished Name
+	local cn
+	eval "cn=$(ossl_get_field4dn_by_name "$9" 'CN')"
+
+	if [ -n "$cn" ]; then
+		local crt="$cn.crt"
+		local kde_crt="$KEY_DIR_EXPIRED/$crt.$serial"
+
+		# <CN>.pem is same file and thus expired too: move it
+		if cmp -s "$crt" "$pem"; then
+			local revoked="$5"
+
+			local key="$cn.key"
+			local kde_key="$KEY_DIR_EXPIRED/$key.$serial"
+			local csr="$cn.csr"
+			local kde_csr="$KEY_DIR_EXPIRED/$csr.$serial"
+
+			if [ -n "$revoked" ]; then
+				mv -f "$key.revoked" "$kde_key" ||:
+				mv -f "$csr.revoked" "$kde_csr" ||:
+				mv -f "$crt.revoked" "$kde_crt" ||:
+			else
+				safe_copy "$key" "$kde_key" ||:
+				safe_copy "$csr" "$kde_csr" ||:
+				safe_copy "$crt" "$kde_crt" ||:
+			fi 2>/dev/null
+		fi
+	fi
+
+	mv -f "$pem" "$KEY_DIR_EXPIRED" 2>/dev/null ||:
+
+	echo "$line" >>"$index_txt_expired"
+}
+
+ossl_index_txt_for_each_line 'cb' "$index_txt"
+
+if cmp -s "$index_txt_tmp" "$index_txt"; then
+	# Files have same content: no sense to replace
+	:
+else
+	# Make backup of original index.txt then
+	mv "$index_txt" "$index_txt.old"
+	# replace it with new one making it readable by all users then
+	mv -f "$index_txt_tmp" "$index_txt" && chmod a+r "$index_txt"
+	# unset exit handler as there is no temporary file on success
+	trap '' EXIT
+fi

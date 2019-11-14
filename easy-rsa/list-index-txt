@@ -1,0 +1,159 @@
+#!/bin/sh
+
+# Requires: <none>
+
+if [ -z "$IN_EXEC_CA" ]; then
+	printf >&2 -- '%s: run with "exec-ca" prepared environment\n' "$0"
+	exit 1
+fi
+
+# Source functions library
+. "$EASY_RSA/easy-rsa-lib.sh"
+
+# Usage: cell <val> [<var_column_len>]
+cell()
+{
+	local val="$1"
+	local val_len=${#val}
+	local var_column_len="$2" column_len=$((1 + val_len + 1))
+
+	if [ -n "$var_column_len" ]; then
+		local t
+		eval "t=\"\$$var_column_len\""
+		if [ "$t" -ge $column_len ] 2>/dev/null; then
+			column_len="$t"
+		fi
+	fi
+
+	local a=$(((column_len - val_len) / 2))
+	local b=$((column_len - (a + val_len)))
+
+	[ -z "$var_column_len" ] || eval "$var_column_len=\$column_len"
+	printf -- '%*s%s%*s' $a ' ' "$val" $b ' '
+}
+
+################################################################################
+
+# Status |      Expires      | ... days |      Revoked      | Serial |     CN     |  Filename
+#--------+-------------------+----------+-------------------+--------+------------+----------
+#    F   | ossl_date2human() |    DDD   | ossl_date2human() |        |            |
+
+## Status
+
+status_title='Status'
+status_len="$(ossl_index_txt_status '__mlen__')"
+status_len=$((1 + status_len + 1))
+
+## Expires/Revoked
+
+datetime_len="$(ossl_date2human '191024000000Z')"
+datetime_len=${#datetime_len}
+datetime_len=$((1 + datetime_len + 1))
+
+expires_title='Expires'
+expires_len=$datetime_len
+revoked_title='Revoked'
+revoked_len=$datetime_len
+
+## Expires (days)
+
+expires_days_title='... days'
+expires_days_len=${#expires_days_title}
+expires_days_len=$((1 + expires_days_len + 1))
+
+## Serial
+
+# See rfc5280 "id-at-serialNumber" and "ub-serial-number"
+# for more information.
+serial_spec_len=64
+
+serial_title='Serial'
+serial_len=${#serial_title}
+serial_len=$((1 + serial_len + 1))
+
+## CN
+
+# See rfc5280 "id-at-commonName", "ub-common-name" and
+# "ub-common-name-length" for more information.
+cn_spec_len=64
+
+cn_title='CN'
+cn_len=36
+
+## Filename (FN)
+
+fn_title='Filename'
+fn_len=${#fn_title}
+fn_len=$((1 + fn_len + 1))
+
+# Usage: row <var_lengths> ...
+row()
+{
+	local func="${FUNCNAME:-row}"
+
+	local var_lengths="${1:?missing 1st arg to ${func}() <var_lengths>}"
+	shift
+
+	local l=''
+
+	cell "$1" 'status_len'       && echo -n '|' && l="${l}${status_len} "
+	cell "$2" 'expires_len'      && echo -n '|' && l="${l}${expires_len} "
+	cell "$3" 'expires_days_len' && echo -n '|' && l="${l}${expires_days_len} "
+	cell "$4" 'revoked_len'      && echo -n '|' && l="${l}${revoked_len} "
+	cell "$5" 'serial_len'       && echo -n '|' && l="${l}${serial_len} "
+	cell "$6" 'cn_len'           && echo -n '|' && l="${l}${cn_len} "
+	cell "$7" 'fn_len'           && echo        && l="${l}${fn_len} "
+
+	eval "$var_lengths='$l'"
+}
+
+#### Table header
+
+row 'lengths' "$status_title" "$expires_title" "$expires_days_title" \
+    "$revoked_title" "$serial_title" "$cn_title" "$fn_title"
+
+n=''
+for l in $lengths; do
+	if [ -n "$n" ]; then
+		echo -n '+'
+	else
+		n=1
+	fi
+	while [ $((l -= 1)) -ge 0 ]; do
+		echo -n '-'
+	done
+done
+unset n
+
+echo
+
+## Table contents
+
+[ "$prog_name" != 'list-expired-index-txt' ] || KEY_DIR="$KEY_DIR/expired"
+
+index_txt="$KEY_DIR/index.txt"
+[ -s "$index_txt" ] || exit
+
+# Usage: cb <line> \                      # $1
+#	    <status> \                    # $2
+#	    <expires> <expires_days> \    # $3 $4
+#	    <revoked> <revoked_reason> \  # $5 $6
+#	    <serial> \                    # $7
+#	    <filename> \                  # $8
+#	    <dn>                          # $9
+cb()
+{
+	local status="$(ossl_index_txt_status "$2")"
+	local expires="$(ossl_ts2human "$3")"
+	local expires_days="$4"
+	local revoked="$([ -z "$5" ] && echo 'No' || ossl_ts2human "$5")"
+	#local revoked_reason="$6"
+	local serial="$7"
+	local filename="$(ossl_index_txt_filename "$serial" "$8")"
+	local cn="$(ossl_get_field4dn_by_name "$9" 'CN')"
+
+	row 'lengths' "$status" "$expires" "$expires_days" \
+		"$revoked" "$serial" "$cn" "$filename"
+}
+
+ossl_index_txt_for_each_line 'cb' "$index_txt"

@@ -1,0 +1,14 @@
+#!/bin/sh
+
+# Make a certificate/private key pair using a locally generated
+# root certificate.
+
+if [ -z "$IN_EXEC_CA" ]; then
+	printf >&2 -- '%s: run with "exec-ca" prepared environment\n' "$0"
+	exit 1
+fi
+
+# Source functions library
+. "$EASY_RSA/easy-rsa-lib.sh"
+
+exec "$EASY_RSA/pkitool" --interact --client "$@"

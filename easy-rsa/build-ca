@@ -1,0 +1,161 @@
+#!/bin/sh -e
+
+# Requires: ln(1), rm(1), grep(1), sed(1), mktemp(1), cat(1)
+
+if [ -z "$IN_EXEC_CA" ]; then
+	printf >&2 -- '%s: run with "exec-ca" prepared environment\n' "$0"
+	exit 1
+fi
+
+# Source functions library
+. "$EASY_RSA/easy-rsa-lib.sh"
+
+# See how we where called
+if [ "$prog_name" = 'build-ca' ]; then
+	if [ -s "$KEY_DIR/index.txt" ]; then
+		printf  >&2 -- '
+WARNING: "%s" exists and not empty.
+
+Looks like you are trying to rebuild CA that will run "clean-all" to
+remove ALL existing certificates for this CA and ALL subCAs as well
+as reinitialize certificate databases.
+
+Type YES (uppercase) if you really want to recreate THIS CA: ' \
+"$KEY_DIR/index.txt"
+		read answer
+		[ "$answer" = 'YES' ] || abort 'Not YES: canceling.\n'
+	fi
+
+	# Cleanup CA and all it's subCAs
+	"$EASY_RSA/clean-all" || exit
+
+	# Build a root certificate and empty certificate revocation list.
+	"$EASY_RSA/pkitool" --interact --initca "$@"
+elif [ -z "$PARENT_KEY_DIR" ]; then
+	# build-inter
+	if [ "$prog_name" != 'build-inter' ]; then
+		printf >&2 -- 'WARNING: called as "%s", assume "build-inter"\n' \
+			"$prog_name"
+		prog_name='build-inter'
+	fi
+
+	# Set KEY_EXPIRE to CA_EXPIRE to make sure issued intermediate
+	# certificate has same expiration time as it's parent CA
+	KEY_EXPIRE=$CA_EXPIRE
+
+	# Set KEY_PASSPHRASE to random one to make sure intermediate CA
+	# private key encrypted with known key. Later we will change to
+	# CA_PASSPHRASE of intermediate CA
+	KEY_PASSPHRASE="$(pwmake 16)"
+
+	# Make an intermediate CA certificate/private key pair
+	# using a locally generated root certificate
+	exec 4>&1
+	eval $(
+	    "$EASY_RSA/pkitool" 3>&1 >&4 \
+	        --sign --interact --inter --pass "$@" | cat
+	) && [ -s "$KEY_DIR/$FN.crt" ] || exit
+	exec >&4-
+
+	# New csr/pkey generated: KEY_PHASPHRASE was used save it
+	if [ $DO_REQ -eq 1 ]; then
+		# Store it in PARENT Key Passphrase File temorary file to avoid
+		# passing as exec-ca parameter making it visible to others
+		PARENT_KPF="$(mktemp -t 'build-inter.pkpf.XXXXXXXX')" || exit
+
+		# Make sure it is removed if exec fails
+		trap 'rm -f "$PARENT_KPF"' EXIT
+
+		# Not making it compatible for sourcing (e.g. with "."
+		# or "source" builtin) to avoid possible code inject
+		echo "$KEY_PASSPHRASE" >"$PARENT_KPF"
+	fi
+
+	# Re-exec itself with exec-ca to switch to subCA config
+	exec "$EASY_RSA/exec-ca" \
+	     "EASY_RSA=$EASY_RSA" \
+	     "PARENT_KEY_DIR=$KEY_DIR" \
+	     "PARENT_KPF=$PARENT_KPF" \
+	     "FN=$FN" \
+		-- "$FN" "$0" "$@"
+
+	# Never reached
+	exit
+elif [ -z "$IN_EXEC_CA" ]; then
+	! : || abort -- '%s: invalid usage model\n' "$prog_name"
+else
+	if ! cmp -s "$PARENT_KEY_DIR/last-key" "$KEY_DIR/ca.key"; then
+		# If we here then probably intermediate CA certificate/key
+		# recreated and there is little reason to ask user before
+		# cleanup: do silently
+
+		# Read single line PARENT Key Passphrase File and remove it
+		KEY_PASSPHRASE="$(
+			read -r line <"$PARENT_KPF"
+			rm -f "$PARENT_KPF"
+			echo "$line"
+		)"
+
+		# Cleanup CA and all it's subCAs
+		"$EASY_RSA/clean-all" || exit
+
+		# Change private key passphrase to set intermediate CA
+		# CA_PASSPHRASE or generate new one as initially we encrypted
+		# with temporary passphrase that should not be reused
+		[ -n "$CA_PASSPHRASE" ] || CA_PASSPHRASE="$(pwmake 16)"
+
+		"$OPENSSL" pkey \
+			-passin 'env:KEY_PASSPHRASE' \
+			-passout 'env:CA_PASSPHRASE' \
+			-in "$PARENT_KEY_DIR/last-key" \
+			-out "$KEY_DIR/ca.key"
+
+		r="^\s*\(export\s\+CA_PASSPHRASE\)=['\"]\?\(.*\)[\"']\?\(\s*\)\(#.*\)\?\$"
+		ca_passphrase="$(sed -n -e "s|$r|\2|p" "$VARS_FILE")"
+		if [ "$ca_passphrase" != "$CA_PASSPHRASE" ]; then
+			if grep -q "$r" "$VARS_FILE"; then
+				sed -i "$VARS_FILE" \
+				    -e "s|$r|\1='$CA_PASSPHRASE'\3\4|"
+			else
+				echo "export CA_PASSPHRASE='$CA_PASSPHRASE'" \
+					>>"$VARS_FILE"
+			fi
+		fi
+		unset r ca_passphrase
+
+		# Make sure KEY_PASSPHRASE is empty to avoid possible reuse
+		KEY_PASSPHRASE=''
+
+		# Copy intermediate CA private key encrypted with new
+		# passphrase back to PARENT_KEY_DIR
+		make_copy "$KEY_DIR/ca.key" "$PARENT_KEY_DIR/last-key"
+	fi
+
+	# Copy intermediate CA certificate
+	make_copy "$PARENT_KEY_DIR/last-crt" "$KEY_DIR/ca.crt"
+
+	# Link child to parent
+	relative_path "$PARENT_KEY_DIR" "$KEY_DIR/parent" target
+	ln -sf "$target" "$KEY_DIR/parent"
+	# Link parent to child
+	relative_path "$KEY_DIR" "$PARENT_KEY_DIR/child-${KEY_DIR##*/}" target
+	ln -sf "$target" "$PARENT_KEY_DIR/child-${KEY_DIR##*/}"
+fi
+
+# Generate CRL
+"$OPENSSL" ca -gencrl \
+	${CA_PASSPHRASE:+-passin env:CA_PASSPHRASE} \
+	-out "$KEY_DIR/crl.pem" \
+	-config "$KEY_CONFIG"
+
+# Make CA chain file (bundle)
+make_bundle "$KEY_DIR" 'ca.crt' 'export-ca.crt'
+
+# Make CRL chain file (bundle)
+make_bundle "$KEY_DIR" 'crl.pem' 'export-crl.pem'
+
+# Put new CA and CRL bundles to shared (e.g. httpd served) directory
+if [ -d "$SHARED_CA_DIR" ]; then
+	safe_copy "$KEY_DIR/export-ca.crt" "$SHARED_CA_DIR/ca.crt"
+	safe_copy "$KEY_DIR/export-crl.pem" "$SHARED_CA_DIR/crl.pem"
+fi

@@ -1,0 +1,2 @@
+# Update index.txt periodically.
+01 * * * * root sleep $(($$ \% 900)); @target@/update-index-txt

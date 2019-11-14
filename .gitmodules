@@ -1,0 +1,3 @@
+[submodule ".subprojects/installsh"]
+	path = .subprojects/installsh
+	url = https://github.com/serhepopovych/installsh.git

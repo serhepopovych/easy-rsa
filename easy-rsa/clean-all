@@ -1,0 +1,76 @@
+#!/bin/sh
+
+if [ -z "$IN_EXEC_CA" ]; then
+	printf >&2 -- '%s: run with "exec-ca" prepared environment\n' "$0"
+	exit 1
+fi
+
+# Source functions library
+. "$EASY_RSA/easy-rsa-lib.sh"
+
+# Check shared url/dir configurations
+
+# ca
+t="$SHARED_CA_URL/"
+[ -z "${t##$SHARED_URL_BASE/*}" ] || \
+	error '%s: %s must be suburl under %s\n' \
+		"$prog_name" 'SHARED_CA_URL'   'SHARED_URL_BASE' || \
+	exit
+
+t="$SHARED_CA_DIR/"
+[ -z "${t##$SHARED_DIR_BASE/*}" ] || \
+	error '%s: %s must be under %s\n' \
+		"$prog_name" 'SHARED_CA_DIR'   'SHARED_DIR_BASE' || \
+	exit
+
+# ovpn
+t="${SHARED_OVPN_URL:+$SHARED_OVPN_URL/}"
+[ -z "${t##$SHARED_URL_BASE/*}" ] || \
+	error '%s: %s must be suburl under %s\n' \
+		"$prog_name" 'SHARED_OVPN_URL' 'SHARED_URL_BASE' || \
+	exit
+
+t="${SHARED_OVPN_DIR:+$SHARED_OVPN_DIR/}"
+[ -z "${t##$SHARED_DIR_BASE/*}" -o -z "${t##$KEY_DIR/*}" ] || \
+	error '%s: %s must be under %s or %s\n' \
+		"$prog_name" 'SHARED_OVPN_DIR' 'SHARED_DIR_BASE' 'KEY_DIR' || \
+	exit
+
+# Cleanup child CAs first
+for child in "$KEY_DIR"/child-*; do
+	[ -L "${child}" ] || continue
+
+	# Shart in clean environment to avoid "vars-*" collisions
+	"$EASY_RSA/exec-ca" "EASY_RSA=$EASY_RSA" \
+		-- "${child##$KEY_DIR/child-}" "$0" "$@" ||:
+
+	rm -f "${child}" ||:
+done
+
+# Clean this CA next
+rm -rf "$KEY_DIR"
+install -d -m 0700 "$KEY_DIR" &&
+echo -n >"$KEY_DIR/index.txt" &&
+echo 'unique_subject = no' >"$KEY_DIR/index.txt.attr" &&
+echo 01 >"$KEY_DIR/serial"
+
+if [ -n "${SHARED_DIR_BASE-}" ]; then
+	rm -rf "$SHARED_DIR_BASE" ||:
+	install -d -m 0750 "$SHARED_DIR_BASE"
+fi
+
+if [ -n "${SHARED_OVPN_DIR-}" ]; then
+	rm -rf "$SHARED_OVPN_DIR" ||:
+	install -d -m 0750 "$SHARED_OVPN_DIR/client" "$SHARED_OVPN_DIR/server" || \
+		error '%s: fail to create %s("%s") directory\n' \
+			"$prog_name" 'SHARED_OVPN_DIR' "$SHARED_OVPN_DIR"
+fi
+
+if [ -n "${SHARED_CA_DIR-}" ]; then
+	rm -rf "$SHARED_CA_DIR" ||:
+	install -d -m 0750 "$SHARED_CA_DIR" || \
+		error '%s: fail to create %s("%s") directory\n' \
+			"$prog_name" 'SHARED_CA_DIR' "$SHARED_CA_DIR"
+fi
+
+:

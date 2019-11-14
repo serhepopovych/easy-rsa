@@ -1,0 +1,23 @@
+#!/bin/sh -ue
+
+# Requires: sed(1)
+
+## mod_secdownload
+
+# Usage: get_param <u> [var>] ...
+get_param()
+{
+    local n="${0##*/mod/}"
+    local u="${1:?missing 1st arg to ${n}() (<u>)}" && shift
+
+    # Static for now as we do not allow user to set this parameter as it
+    # might supply incorrect (colliding) URL prefix.
+    local uri_prefix='/sec'
+
+    if [ -n "${1+x}" ]; then
+        echo "var.url_secdl_uri_prefix = \"$uri_prefix\""
+    else
+        echo "$uri_prefix"
+    fi
+}
+get_param "$@"

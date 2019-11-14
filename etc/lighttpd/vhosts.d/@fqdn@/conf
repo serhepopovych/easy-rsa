@@ -1,0 +1,120 @@
+
+$HTTP["host"] =~ "^@fqdn_regex@(:|$)" {
+  var.server_name = "@fqdn@"
+
+  ## common filesystem paths
+
+  var.vhosts_d = vhosts_d + "/" + server_name
+
+  var.auth_dir = vhosts_d + "/auth"
+  var.pki_dir  = vhosts_d + "/pki"
+  var.xbin_dir = vhosts_d + "/xbin"
+
+  var.log_root = log_root + "/" + server_name
+
+  ## common url prefixes
+
+  var.url_prefix_regex    = "^/(~[^/]+)"
+
+  var.url_ca_regex        = "([_[:alnum:]]+CA)"
+  var.url_path_regex      = "((/[^/]*)*)"
+  var.url_base64c_regex   = "([-_[:alnum:]])"
+  var.url_base64_regex    = "(" + url_base64c_regex + "+)"
+  var.url_ts_hex_regex    = "([[:xdigit:]]{8})"
+
+  var.url_prefix_ca_regex = url_prefix_regex + "/" + url_ca_regex
+
+  var.url_suffix_regex    = url_path_regex + "$"
+
+  ## userdir
+
+  var.userdir_exclude_user = (
+    "root", "bin", "daemon", "adm", "sys", "operator",
+    "games", "mail", "news", "uucp", "nobody"
+  )
+
+  var.userdir_path = "easy-rsa/.htdocs"
+
+  ## secdownload
+
+  # Hint: use symlink to `.' reduce to 2 path segments when stored w/o subdir
+  var.url_secdl_3segs_regex    = "/" + url_ca_regex + "(/[^/]+){2}"
+  var.secdl_path_segments      = 3
+  var.url_secdl_mac_regex      = "/(" + url_base64c_regex + "{43})"
+  var.secdl_algorithm          = "hmac-sha256"
+  var.url_secdl_ts_regex       = "/" + url_ts_hex_regex
+  var.url_secdl_protpath_regex = url_secdl_ts_regex  + url_secdl_3segs_regex
+  var.url_secdl_securl_regex   = url_secdl_mac_regex + url_secdl_protpath_regex
+
+  include_shell vhosts_d + "/xbin/mod/secdownload/uri-prefix ~ var" # url_secdl_uri_prefix
+  var.url_prefix_secdl_regex   = url_prefix_regex + url_secdl_uri_prefix + url_secdl_securl_regex
+
+
+  # Common server configuration
+  server.name = server_name
+
+  # Must be empty, read-only directory
+  server.document-root = server_root + "/empty"
+
+  # Forbid all http methods except GET
+  $HTTP["request-method"] !~ "^GET$" {
+    url.access-deny = ( "" )
+  }
+
+  # User home subdirectory
+  userdir.path = userdir_path
+  userdir.exclude-user = userdir_exclude_user
+
+  # Secure and Fast Downloading
+  secdownload.algorithm     = secdl_algorithm
+  secdownload.path-segments = secdl_path_segments
+  secdownload.hash-querystr = "disable"
+  # secret, document-root, uri-prefix and timeout defined per user
+
+  # Access logging
+  accesslog.filename = log_root + "/access.log"
+
+  $HTTP["scheme"] == "http" {
+    # All CAs
+    $HTTP["url"] =~ url_prefix_ca_regex + "/ca" + url_suffix_regex {
+      # dirlisting
+      dir-listing.activate = "enable"
+      index-file.names = ()
+
+    } else {
+      # Tune up socket IO timeouts
+      server.max-read-idle = 30
+      server.max-write-idle = 60
+
+      # Disable keep-alive functionality
+      server.max-keep-alive-requests = 0
+
+      url.redirect-code = 301
+      # This requires 1.4.50+ as we do not have access to %n from $HTTP["host"] here
+      url.redirect = ( "" => "https://${url.authority}${url.path}${qsa}" )
+    }
+  }
+
+  $HTTP["scheme"] == "https" {
+    # SSL
+    ssl.pemfile = pki_dir + "/cert.pem"
+    ssl.privkey = pki_dir + "/privkey.pem" # 1.4.53+
+    ssl.ca-file = pki_dir + "/chain.pem"
+
+    # HSTS
+    setenv.add-response-header += (
+      "Strict-Transport-Security" => "max-age=31536000; includeSubdomains"
+    )
+
+    # Per IP connection limit
+    evasive.max-conns-per-ip = 10
+    evasive.silent = "disable"
+
+    # Authentication
+    auth.backend = "htdigest"
+    auth.backend.htdigest.userfile = "/dev/null"
+
+    # Include user specific configurations, if any
+    include_shell vhosts_d + "/xbin/users-conf.sh"
+  }
+}

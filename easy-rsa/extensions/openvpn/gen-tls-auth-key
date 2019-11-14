@@ -1,0 +1,4 @@
+#!/bin/sh -e
+
+TA_KEY="${OVPN_CONFIGS_DIR:-.}/ta.key"
+openvpn --genkey --secret "$TA_KEY" && chmod go+r "$TA_KEY"

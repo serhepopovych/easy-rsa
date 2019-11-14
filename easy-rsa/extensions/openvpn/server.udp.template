@@ -1,0 +1,131 @@
+#
+# All paths in this configuration file assume "--cd" OpenVPN option is given
+# on command line and points to directory with this configuration file.
+#
+# For example you can run openvpn(8) with following command line assuming your
+# PWD points to directory with "%config%" file:
+#
+#  # openvpn --cd "${PWD}" --config "%config%"
+#
+# Make all necessay adjustments to config to reflect target system layout.
+#
+
+# Verbose
+verb 3
+#mute 2
+
+## Logging
+#log-append %logdir%
+
+# Basic settings
+proto udp6
+port %port%
+dev-type tun
+dev tun
+
+## Use "local" to explicitly set the source address on multi-homed hosts
+#local %remote%
+# Multi-homed host with no "local". Needed for IPv4+IPv6 dual-stack
+multihome
+
+# Make sure IPv6 sockets also bounds to IPv4 (no ipv6only parameter)
+bind
+# Explicitly enable client roaming (e.g. DHCP address change)
+float
+
+## Execute scripts
+#script-security 2
+#up "%scripts%/up.sh"
+#down "%scripts%/down.sh"
+
+# Tell OpenVPN to be a multi-client server
+topology subnet
+server 203.0.113.0 255.255.255.0
+server-ipv6 2001:db8:ffff::/64
+
+## Create route(s) to networks behind clients
+#route 198.51.100.0 255.255.255.0
+#route-ipv6 2001:db8:ffff:100::/56
+
+# Push routes or redirect gateway
+#push "route <network/ip> <netmask> <gateway>"
+#push "route-ipv6 <ipv6addr>/<bits> <gateway>"
+
+# Either route all traffic via tunnel
+config "%route_default%"
+push "route-ipv6 ::/0 vpn_gateway"
+push "redirect-gateway def1 ipv6"
+#push "redirect-gateway def1"
+
+# ... or specific networks only (split tunnel)
+#config "%route_split%"
+#push "route 192.0.2.0 255.255.255.0"
+#push "route-ipv6 2001:db8::/48"
+#push "redirect-private"
+
+# Push DHCP options (https://community.openvpn.net/openvpn/ticket/982)
+push "dhcp-option DNS 203.0.113.1"
+push "dhcp-option DNS 2001:db8:ffff::1"
+push "dhcp-option DOMAIN example.net."
+push "dhcp-option DISABLE-NBT"
+
+# Force windowz to use new DNS server and prevent DNS leak
+push "register-dns"
+push "block-outside-dns"
+
+# Keep TUN devices and keys open across restarts
+persist-tun
+push "persist-tun"
+persist-key
+push "persist-key"
+
+# Disable compression
+comp-lzo no
+push "comp-lzo no"
+
+# Client should attempt reconnection on link failure
+keepalive 15 60
+
+## Disable Nagle algo in TCP stack to send data as soon as possible
+#tcp-nodelay
+
+## Increase number of packets in queue before sending to TCP socket
+#tcp-queue-limit 256
+
+## Avoid poll()/epoll()/select() before writing to the tun device (udp only)
+#fast-io
+
+# Notify clients on server exit/restart (udp only, no need for tcp)
+explicit-exit-notify
+
+## Prevent process memory from being swapped out
+#mlock
+
+# The server doesn't need privileges
+user nobody
+#group nobody
+
+## Allow multiple clients with same certificate (Common Name)
+#duplicate-cn
+
+# Apply per client configuration if file with CN fro their cert exists
+client-config-dir %ccd%
+## Enforce per client configuration
+#ccd-exclusive
+
+# Maintain persistent client to ip mapping
+ifconfig-pool-persist ipp.txt
+
+tun-mtu-extra 32
+
+# Digest algo to authenticate packets
+auth SHA256
+#auth SHA1
+
+# Cipher algo to encrypt packets
+cipher AES-256-CBC
+#cipher none
+
+# Support cipher negotiation with client (if it supports too)
+setenv opt ncp-ciphers AES-256-GCM:AES-256-CBC
+#setenv opt ncp-disable

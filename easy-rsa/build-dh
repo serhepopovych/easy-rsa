@@ -1,0 +1,14 @@
+#!/bin/sh
+
+# Build Diffie-Hellman parameters for the server side
+# of an SSL/TLS connection.
+
+if [ -z "$IN_EXEC_CA" ]; then
+	printf >&2 -- '%s: run with "exec-ca" prepared environment\n' "$0"
+	exit 1
+fi
+
+# Source functions library
+. "$EASY_RSA/easy-rsa-lib.sh"
+
+exec "${OPENSSL}" dhparam -out "${KEY_DIR}/dh${KEY_SIZE}.pem" "${KEY_SIZE}"

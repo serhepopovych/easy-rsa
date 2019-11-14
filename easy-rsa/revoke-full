@@ -1,0 +1,164 @@
+#!/bin/sh -e
+
+# Requires: mv(1), chmod(1)
+
+# revoke a certificate, regenerate CRL, verify revocation,
+# update CRLs for child CAs and (optionally) put CRL to shared directory
+
+if [ -z "${IN_EXEC_CA-}" ]; then
+	if [ "${0##*/}" = 'revoke-full' ]; then
+		printf >&2 -- '%s: run with "%s" prepared environment\n' \
+			"$0" 'revoke-full'
+		exit 1
+	fi
+
+	# Try to determine EASY_RSA
+	if [ -z "${EASY_RSA-}" ]; then
+		EASY_RSA="$(readlink -qf "$0" 2>/dev/null)" || EASY_RSA="$0"
+		EASY_RSA="${EASY_RSA%/*}"
+		if [ ! -f "$EASY_RSA/easy-rsa-lib.sh" ]; then
+			printf >&2 -- '%s: cannot find easy-rsa location\n' "$0"
+			exit 1
+		fi
+	fi
+
+	# Change to EASY_RSA
+	if [ ! -d "$EASY_RSA" ]; then
+		printf >&2 -- '%s: EASY_RSA ("%s") is not a directory\n' \
+			"$0" "$EASY_RSA"
+		exit 1
+	fi
+
+	# Source functions library
+	KEY_DIR='dummy' . "$EASY_RSA/easy-rsa-lib.sh"
+
+	# Try to update-crl for each non-system user CAs
+	for_each_user_ca "$@"
+
+	# Exit
+	exit
+fi
+
+# Per user configuration
+export VARS_DIR=${VARS_DIR:-~/easy-rsa}
+export VARS_FILE="$VARS_DIR/vars-$IN_EXEC_CA"
+
+if ! . "$VARS_FILE"; then
+	printf >&2 -- '%s: source vars ("%s") file failed\n' \
+		    "$0" "$VARS_FILE"
+	exit 1
+fi
+
+# Change working directory to KEY_DIR
+cd "$KEY_DIR" ||:
+
+# Source functions library
+. "$EASY_RSA/easy-rsa-lib.sh"
+
+if [ -z "$update_childs" ]; then
+	if [ "$prog_name" = 'revoke-full' ]; then
+		if [ $# -ne 1 ]; then
+			printf >&2 -- \
+				'usage: %s {<KEY_CN>.crt|<serial>.pem}\n' \
+				"$prog_name"
+			exit 1
+		fi
+		if ! (V=0 valid_file "$1"); then
+			printf >&2 -- \
+				'%s: "%s" is not valid certificate\n' \
+				"$prog_name" "$1"
+			exit 1
+		fi
+		update_childs=y
+	else
+		# Either revoke-full or update-crl
+		if [ "$prog_name" != 'update-crl' ]; then
+			printf >&2 -- \
+				'WARNING: called as "%s", assume "%s"\n' \
+				"$prog_name" 'update-crl'
+			prog_name='update-crl'
+		fi
+		set --
+	fi
+
+	# Set defaults
+	export KEY_CN=''
+	export KEY_OU=''
+	export KEY_NAME=''
+
+	# Revoke certificate, backup it and generate a new CRL
+	if [ -n "$1" ]; then
+		# While there might be more reasons to revoke certificate other
+		# than keyCompromise (1) we revoke all certificates using same
+		# private key to ensure no one is able to reuse it.
+		#
+		# Note that adding revokation reason effectively switch CRL
+		# version to 2 which may be unsupported by some (rare) software.
+		#
+		# Expired certificates are never considered for revocation as
+		# they are already not valid and their serial numbers no longer
+		# present in CRL.
+
+		revoke_cert_list="$(ossl_index_txt_same_pubkey_flist "$1")"
+		eval "ossl_index_txt_revoke_certs $revoke_cert_list"
+	fi
+
+	# Will be set to real values later
+	RT=''
+	CRL_TMP=''
+
+	# Cleanup on exit
+	trap 'rm -f $CRL_TMP $RT' EXIT
+
+	# Generate a new CRL
+	CRL='crl.pem'
+	CRL_TMP="$(mktemp "$CRL.XXXXXXXX")"
+
+	"$OPENSSL" ca -gencrl \
+		${CA_PASSPHRASE:+-passin env:CA_PASSPHRASE} \
+		-out "$CRL_TMP" \
+		-config "$KEY_CONFIG"
+
+	# Verify the revocation
+	if [ -n "$1" ]; then
+		RT="$(mktemp 'revoke-test.pem.XXXXXXXX')"
+
+		if (V=0 valid_file 'export-ca.crt'); then
+			cat 'export-ca.crt' "$CRL_TMP" >"$RT"
+		else
+			cat 'ca.crt' "$CRL_TMP" >"$RT"
+		fi
+
+		for FN in "$@"; do
+			"$OPENSSL" verify -CAfile "$RT" -crl_check "$FN" ||
+				continue
+
+			printf >&2 -- '%s: certificate "%s" is not revoked\n' \
+				"$prog_name" "$FN"
+			exit 121
+		done
+	fi
+
+	# Replace old CRL with new one atomically
+	chmod -f go+r "$CRL_TMP" && mv -f "$CRL_TMP" "$CRL" && CRL_TMP=''
+fi
+
+# Make CRL chain file (bundle)
+make_bundle "$KEY_DIR" 'crl.pem' 'export-crl.pem'
+
+# Put new CRL bundle to shared (e.g. httpd served) directory
+if [ -d "$SHARED_CA_DIR" ]; then
+	safe_copy "$KEY_DIR/export-crl.pem" "$SHARED_CA_DIR/crl.pem" ||:
+fi
+
+# Finally update our child CAs
+for child in "$KEY_DIR"/child-*; do
+	[ -L "${child}" ] || continue
+
+	"$EASY_RSA/exec-ca" \
+		"EASY_RSA=$EASY_RSA" \
+		"update_childs=$update_childs" \
+		-- "${child##$KEY_DIR/child-}" "$0" "$@" ||:
+done
+
+:

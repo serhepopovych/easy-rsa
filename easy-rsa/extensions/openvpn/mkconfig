@@ -1,0 +1,735 @@
+#!/bin/sh -ue
+
+# Requires: cat(1), sed(1), mv(1), rm(1), mktemp(1), chmod(1), ln(1),
+#           hostname(1), install(1), tar(1)
+
+if [ -z "${IN_EXEC_CA-}" ]; then
+    printf >&2 -- '%s: run with "exec-ca" prepared environment\n' "$0"
+    exit 1
+fi
+
+# Source functions library
+. "$EASY_RSA/easy-rsa-lib.sh"
+
+# Exit if OpenVPN config isn't managed for this CA
+if [ -z "${OVPN_DIR-}" ]; then
+    printf >&2 -- 'OpenVPN configuration is not enabled for this CA'
+    exit 0
+fi
+
+##################### PREPARE ENVIRONMENT AND COMMAND LINE #####################
+
+## Parse command line options, if any
+
+usage()
+{
+    local rc=$?
+    local fd
+
+    [ $rc -eq 0 ] && fd=1 || fd=2
+
+    cat >&$fd <<EOF
+Usage: $prog_name [options] <CommonName>
+Options:
+  --remote   : Remote OpenVPN peer hostname or IP address
+  --port     : Port to use on remote OpenVPN host (default: 1194)
+  --proto    : Protocol used to connect to peer (default: udp)
+  --mode     : Mode used to connect to peer (default: client)
+
+  --instance : Instance name to use as subdirectory name (default: --mode)
+  --newkey   : Force new private key creation (default: no)
+
+  --help|--usage
+             : This help message
+
+  --version  : This program version
+
+<CommonName> is a X.509 "Common Name" used to distinguish peer.
+It can be either hostname when --mode is "server" or legal name
+of user when --mode is "client".
+EOF
+    return $rc
+}
+trap 'usage' EXIT
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --remote)   [ -n "${2-}" ] || exit
+                    OVPN_REMOTE="$2"
+                    shift
+                    ;;
+        --port)     [ -n "${2-}" ] || exit
+                    OVPN_PORT="$2"
+                    shift
+                    ;;
+        --proto)    [ -n "${2-}" ] || exit
+                    OVPN_PROTO="$2"
+                    shift
+                    ;;
+        --mode)     [ -n "${2-}" ] || exit
+                    OVPN_MODE="$2"
+                    shift
+                    ;;
+
+        --instance) [ -n "${2-}" ] || exit
+                    OPT_INSTANCE="$2"
+                    shift
+                    ;;
+        --newkey)   OPT_NEWKEY=1 ;;
+
+        --help|--usage)
+                    exit ;;
+        --version)
+                    echo "$prog_name $prog_version"
+                    _exit 0 ;;
+
+        # errors
+        --*)
+                    printf -- '%s: unknown option: %s\n' "$prog_name" "$1"
+                    _exit 1 ;;
+        *)
+                    break ;;
+    esac
+    shift
+done
+
+[ $# -eq 1 ] && [ -n "$1" ] || exit
+
+# Key Common Name
+KEY_CN="$1" && shift
+
+# Make X509 Name from Common Name
+make_shlvar_name "$KEY_CN" KEY_NAME || exit
+
+# remote
+[ -n "${OVPN_REMOTE-}" ] || OVPN_REMOTE="$HOSTNAME" ||
+    error 'cannot determine remote name: using localhost\n' ||
+        OVPN_REMOTE='localhost'
+
+# port
+OVPN_PORT="${OVPN_PORT:-1194}" &&
+    [ "$OVPN_PORT" -gt 0 -a "$OVPN_PORT" -lt 65536 ] 2>/dev/null ||
+OVPN_PORT=1194
+
+# proto
+case "${OVPN_PROTO-}" in
+    tcp)    ;;
+    *)      OVPN_PROTO='udp'   ;;
+esac
+
+# mode
+case "${OVPN_MODE-}" in
+    server) ;;
+    *)      OVPN_MODE='client' ;;
+esac
+
+# instancce
+if [ -z "${OPT_INSTANCE-}" ] || [ -z "${OPT_INSTANCE##*/*}" ]; then
+    OPT_INSTANCE="$OVPN_MODE-$OVPN_PROTO"
+fi
+
+# newkey
+OPT_NEWKEY="${OPT_NEWKEY-}"
+
+# Finish argument parsing
+trap - EXIT
+
+######################## BUILD CERTIFICATE, PRIVATE KEY ########################
+
+## Template macros expansion values
+
+inst="$OPT_INSTANCE"
+
+ccd="$inst/ccd"
+include="$inst/include"
+pki="$inst/pki"
+scripts="$inst/scripts"
+tools="$inst/tools"
+
+route_default="$include/route-defaut"
+route_split="$include/route-split"
+
+logdir='/var/log/openvpn'
+
+## Create CA, cert and key on demand
+
+# Full chain of certificate authorities (ca) and certificate
+fc_crt="$pki/fullchain.pem"
+fc_file="$KEY_DIR/export-ca.crt"
+
+# Certificate of authority (ca) certificate
+ca_crt="$pki/chain.pem"
+ca_file="$KEY_DIR/ca.crt"
+ca_path="$pki/ca"
+
+# Certificate (cert)
+ct_crt="$pki/cert.pem"
+ct_file="$KEY_DIR/$KEY_CN.crt"
+
+# Certificate Signing Request (CSR)
+cs_csr="$pki/csr.pem"            # unused
+cs_file="$KEY_DIR/$KEY_CN.csr"
+
+# Private key (key)
+pk_key="$pki/privkey.pem"
+pk_file="$KEY_DIR/$KEY_CN.key"
+
+# Build CA if not already done
+(V=0 valid_file "$ca_file") ||
+    (KEY_CN='ovpnCA' KEY_NAME='ovpnCA' "$EASY_RSA/build-ca") || exit
+
+# Build cert and key if not already done
+if [ -z "$OPT_NEWKEY" -a -s "$cs_file" -a -s "$pk_file" ]; then
+    # Explicitly ask user, unless --newkey is given, for existing
+    # private key and certificate signing request (csr) reuse
+
+    printf >&2 -- '
+WARNING: certificate signing request (csr) and private key (pkey) files exist
+         and --newkey option is not provided!
+
+  csr  : "%s"
+  pkey : "%s"
+
+You are explicitly asked to reuse them as base for new certificate.
+
+Please answer YES (all uppercase) only if you have valid passphrase
+for pkey and that key is not compromised (in that case you should
+revoke certificate with "revoke-full" <filename> command!!!).
+
+YES to reuse: ' "${cs_file##*/}" "${pk_file##*/}"
+
+    read reuse
+
+    if [ "$reuse" = 'YES' ]; then
+        printf >&2 -- 'REUSE existing pkey and csr\n'
+        OPTS='--sign'
+    else
+        printf >&2 -- 'NEW pkey and csr will be created\n'
+        reuse=''
+    fi
+else
+    reuse=''
+fi
+"$EASY_RSA/build-key" ${OPTS-} "--$OVPN_MODE" "$KEY_CN" || exit
+
+########################## MAKE OPENVPN CONFIGURATION ##########################
+
+## Define helpers
+
+# Usage: fatal <fmt> ...
+fatal()
+{
+    local rc=$?
+    printf -- '%s: ' "$prog_name"
+    error "$@"
+    exit $rc
+}
+
+## Define variables
+
+# Set those to confirm with rest of OVPN_* variables
+OVPN_CONFIGS_DIR="${SHARED_OVPN_DIR:-$KEY_DIR/ovpn}"
+OVPN_CONFIGS_URL="${SHARED_OVPN_URL:-https://$HOSTNAME/~$USER}"
+
+OVPN_CA_PATH="${OVPN_CA_PATH:-/etc/openvpn}/$ca_path"
+OVPN_CA_URL="${OVPN_CA_URL:-https://$HOSTNAME/~$USER/$IN_EXEC_CA/ca}"
+
+OVPN_CONFIG_MODE_DIR="$OVPN_CONFIGS_DIR/$OVPN_MODE"
+OVPN_CONFIG_NAME="$KEY_NAME"
+
+# Config, profile and archive files
+config_template="$OVPN_DIR/$OVPN_MODE.$OVPN_PROTO.template"
+config="$inst/conf"
+
+profile="$OVPN_CONFIG_NAME.ovpn"
+archive="$OVPN_CONFIG_NAME.tgz"
+
+## Create/clean configuration directory, install exit handler to remove it
+## on failure and change current working directory (cwd).
+
+config_dir_tmp=''
+config_dir=''
+
+exit_handler()
+{
+    local rc=$?
+
+    set +e
+
+    if [ -n "$config_dir" ]; then
+        if [ $rc -eq 0 ]; then
+            rm -rf "$inst" "$inst.conf" || rc=$?
+        fi
+
+        cd - >/dev/null ||:
+
+        if [ $rc -eq 0 ]; then
+            rename_dir "$config_dir_tmp" "$config_dir" &&
+                chmod a+rx "$config_dir" || rc=$?
+        fi
+    fi
+    if [ -n "$config_dir_tmp" ]; then
+        rm -rf "$config_dir_tmp" ||:
+    fi
+
+    return $rc
+}
+trap 'exit_handler' EXIT
+
+# Do not create directory with mktemp(1) because group bit is not
+# inherited from parent directory (if set) and umask(1) is not respected.
+
+templ="$OVPN_CONFIG_MODE_DIR/.$OVPN_CONFIG_NAME.XXXXXXXX"
+
+t="$(mktemp -d "$templ")" ||
+    fatal 'cannot create temporary config directory using "%s"\n' "$templ"
+config_dir_tmp="$t"
+
+t="$t/$inst" && install -d "$t" ||
+    fatal 'cannot create instance "%s" subdirectory under "%s"\n' \
+        "$inst" "$config_dir_tmp"
+
+cd "$config_dir_tmp" ||
+    fatal 'cannot change directory to "%s"\n' "$config_dir_tmp"
+config_dir="$OVPN_CONFIG_MODE_DIR/$OVPN_CONFIG_NAME"
+
+unset templ
+
+## Populate temporary config directory
+
+install -d "$ccd" "$include" "$pki" "$scripts" "$tools" ||
+    fatal 'cannot create config subdirectories\n'
+
+# Try "tls-crypt" key first, then "tls-auth" and gen-tls-auth-key if missing
+  if tk_mode='tls-crypt' && tk_key="$pki/tc.key" &&
+       (V=0 make_copy "$OVPN_CONFIGS_DIR/tc.key" "$tk_key" 177); then
+    :
+elif tk_mode='tls-auth'  && tk_key="$pki/ta.key" &&
+       (V=0 make_copy "$OVPN_CONFIGS_DIR/ta.key" "$tk_key" 177); then
+    :
+elif OVPN_CONFIGS_DIR="$OVPN_CONFIGS_DIR" "$OVPN_DIR/gen-tls-auth-key" &&
+            make_copy "$OVPN_CONFIGS_DIR/ta.key" "$tk_key" 177;  then
+    :
+else
+    fatal 'no tls-crypt/tls-auth keys and fail to generate tls-auth key\n'
+fi
+
+# cert
+make_copy "$ct_file" "$ct_crt"
+# key
+make_copy "$pk_file" "$pk_key" 177
+# ca
+if [ "$OVPN_MODE" = 'client' ]; then
+    # fullchain
+    (V=0 valid_file "$fc_file") && t="$fc_file" || t="$ct_file"
+    make_copy "$ct_file" "$fc_crt" && cat "$t" >>"$fc_crt" ||
+        fatal 'creating and appending "%s" file failed\n' "$t"
+    # chain
+    make_copy "$t" "$ca_crt"
+    # README
+    if t="$pki/README" && cat >"$t" <<'_EOF'
+This directory contains your keys and certificates. It is compatible with
+certbot (an ACME protocol and letsencrypt client) live directory layout:
+
+`privkey.pem`  : the private key for your certificate.
+`fullchain.pem`: the certificate file used in most server software.
+`chain.pem`    : certificate authority chain (could be used by OCSP stapling)
+`cert.pem`     : will break many server configurations, and should not be used
+                 without reading further documentation (see link below).
+_EOF
+    then
+        :
+    else
+        fatal 'create "%s" file failed\n' "$t"
+    fi
+else # [ "$OVPN_MODE" != 'client' ]
+    t="$ca_path/bundle" && install -d "$t" ||
+        fatal 'creating "%s" directory for capath opt failed\n' "$t"
+
+    if t="$ca_path/README" && cat >"$t" <<'_EOF'
+Please run "update-capath" to download CAs and CRLs and
+prepare directory for "capath" directive in OpenVPN config.
+
+Make sure you symlinked/copied "update-capath.crontab" for
+executing "update-capath" via cron.
+
+Update "update-capath" absolute paths to match directory
+configuration unpacked on target system.
+
+This file should disappear after "update-capath" succeedes.
+_EOF
+    then
+        :
+    else
+        fatal 'creating "%s" file failed\n' "$t"
+    fi
+
+    # Add update-capath
+    IN_EXEC_CA_ENVVAR="$(make_envvar_name "$IN_EXEC_CA")" ||
+        fatal 'making envvar from "%s" failed\n' "$IN_EXEC_CA"
+
+    t="$tools/update-capath" &&
+    sed -e "s|%ca%|$IN_EXEC_CA|g"      -e "s|%CA%|$IN_EXEC_CA_ENVVAR|g" \
+        -e "s|%CA_URL%|$OVPN_CA_URL|g" -e "s|%CA_PATH%|$OVPN_CA_PATH|g" \
+        "$EASY_RSA/update-capath" >"$t" &&
+    chmod a+rx "$t" ||
+        fatal 'expand "%s" template to "%s" failed\n' \
+            "$EASY_RSA/update-capath" "$t"
+
+    unset IN_EXEC_CA_ENVVAR
+
+    # ... and it's crontab file
+    if t="$t.crontab" && cat >"$t" <<EOF
+# Periodically pull CA and CRL bundles and update OpenVPN CApath directory.
+*/5 * * * * root ${t%.crontab}
+EOF
+    then
+        :
+    else
+        fatal 'creating "%s" file failed\n' "$t"
+    fi
+
+    # Add route-split config
+    if t="$route_split" && cat >"$t" <<EOF
+## Push VPN specific routes to clients in tunnel split config.
+
+# ipv4
+#push "route 192.0.2.0 255.255.255.240"
+#push "route 192.0.2.64 255.255.255.192"
+##config "$t.auto.v4"
+
+# ipv6
+#push "route-ipv6 2001:db8:ffff:1a0::/60"
+#push "route-ipv6 2001:db8:ffff:1b0::/60"
+##config "$t.auto.v6"
+EOF
+    then
+        :
+    else
+        fatal 'creating "%s" file failed\n' "$t"
+    fi
+
+    # Add route-default config
+    if t="$route_default" && cat >"$t" <<EOF
+## Push exclude routes to clients in tunnel default config.
+
+# ipv4
+#push "route 192.0.2.128 255.255.255.240 net_gateway"
+#push "route 192.0.2.192 255.255.255.192 net_gateway"
+##config "$t.auto.v4"
+
+# ipv6
+#push "route-ipv6 2001:db8:ffff:1c0::/60 net_gateway"
+#push "route-ipv6 2001:db8:ffff:1d0::/60 net_gateway"
+##config "$t.auto.v6"
+EOF
+    then
+        :
+    else
+        fatal 'creating "%s" file failed\n' "$t"
+    fi
+
+    # Add up.sh script
+    if t="$scripts/up.sh" && cat >"$t" <<'_EOF'
+#!/bin/sh -e
+
+## vrf-lite
+#/sbin/ip link set dev "$1" master vrf-vpn ||:
+
+## ... pre vrf-lite config
+#/sbin/ip link set dev "$1" group downlink ||:
+#RT="$(ipcalc -bn "$4/$5" |sed -ne 's/^Network:\s\+\([0-9./]\+\)\s*$/\1/p')"
+#ip -4 route replace "$RT" dev "$1" proto vpn scope link table vrf-vpn src "$4"
+
+exit 0
+_EOF
+    then
+        chmod a+rx "$t" || fatal 'chmod "%s" failed\n' "$t"
+    else
+        fatal 'creating "%s" file failed\n' "$t"
+    fi
+
+    # Add down.sh script
+    if t="$scripts/down.sh" && cat >"$t" <<'_EOF'
+#!/bin/sh -e
+
+exit 0
+_EOF
+    then
+        chmod a+rx "$t" || fatal 'chmod "%s" failed\n' "$t"
+    else
+        fatal 'creating "%s" file failed\n' "$t"
+    fi
+fi # [ "$OVPN_MODE" != 'client' ]
+
+# decrypt-pkey
+t="$tools/decrypt-pkey" && make_copy "$EASY_RSA/decrypt-pkey" "$t" &&
+    chmod a+rx "$t" || fatal 'installing "%s" failed\n' "$t"
+
+# logrotate
+if t="$tools/logrotate" && cat >"$t" <<EOF
+$logdir/*.log {
+	weekly
+	rotate 10
+	copytruncate
+	delaycompress
+	compress
+	notifempty
+	missingok
+	su root root
+}
+EOF
+then
+    :
+else
+    fatal 'creating "%s" file failed\n' "$t"
+fi
+
+## Make OpenVPN config from template
+
+# Usage: append_opts_fatal <config|profile> <csv_opts> <and_opts>
+append_opts_fatal()
+{
+    local func="${FUNCNAME:-append_opts_fatal}"
+
+    local type="${1:?missing 1st arg to ${func}() <type>}"
+    local csv_opts="${2:?missing 2d arg to ${func}() <csv_opts>}"
+    local and_opts="${3:?missing 3rd arg to ${func}() <and_opts>}"
+
+    eval "local file=\"\$$type\""
+
+    fatal 'append %s and %s opts to %s ("%s") file failed\n' \
+        "$csv_opts" "$and_opts" "$type" "$file"
+}
+
+# Write config file
+eval sed -e '"s|%mode%|$OVPN_MODE|g"'              \
+         -e '"s|%remote%|$OVPN_REMOTE|g"'          \
+         -e '"s|%port%|$OVPN_PORT|g"'              \
+         -e '"s|%proto%|$OVPN_PROTO|g"'            \
+         -e '"s|%config%|$config|g"'               \
+         -e '"s|%logdir%|$logdir|g"'               \
+         -e '"s|%inst%|$inst|g"'                   \
+         -e '"s|%ccd%|$ccd|g"'                     \
+         -e '"s|%include%|$include|g"'             \
+         -e '"s|%pki%|$pki|g"'                     \
+         -e '"s|%scripts%|$scripts|g"'             \
+         -e '"s|%tools%|$tools|g"'                 \
+         -e '"s|%route_default%|$route_default|g"' \
+         -e '"s|%route_split%|$route_split|g"'     \
+         '"$config_template"' >"$config" ||
+    fatal 'expand config template ("%s") to "%s" failed\n' \
+        "$config_template" "$config"
+
+t="$inst.conf" && ln -sf "$config" "$t" ||
+    fatal 'creating symlink "%s" -> "%s" failed\n' "$config" "$t"
+
+# Append "TLS params" header, verify-hash and remote-cert-tls <peer_mode>
+eval $(
+    ossl_x509_get_var \
+        "$ca_file" \
+        'SHA256 Fingerprint' \
+        'ca_sha256_fp' \
+        -sha256 \
+        -fingerprint
+) || fatal 'getting SHA256 fingerprint of CA ("%s") file failed\n' "$ca_file"
+
+if [ "$OVPN_MODE" = 'client' ]; then
+    # local is client, remote should be server
+    remote_cert_eku='server'
+else
+    # local is server, remote should be client
+    remote_cert_eku='client'
+fi
+
+# verify-hash and remote-cert-tls
+if cat >>"$config" <<EOF
+
+## TLS params
+
+# Accept only certificates signed by specific CA (useful with intermediate CA)
+verify-hash $ca_sha256_fp SHA256
+
+# Verify peers certificate extended key usage (eku)
+remote-cert-tls $remote_cert_eku
+EOF
+then
+    :
+else
+    append_opts_fatal 'config' 'verify-hash' 'remote-cert-tls'
+fi
+
+if [ "$OVPN_MODE" = 'client' ]; then
+    # Take config as profile base
+    sed -n -e '/^$/,$p' "$config" >"$profile"
+
+    # client
+    cat >>"$config" <<EOF
+
+# Certificate authority (CA) file in .pem format
+ca $ca_crt
+EOF
+else
+    # server
+    cat >>"$config" <<EOF
+
+# No DH by default. Only ECDH.
+dh none
+
+# Directory containing trusted certificates (CAs and CRLs).
+capath $ca_path
+EOF
+fi || append_opts_fatal 'config' 'dh' 'capath'
+
+# cert, key and $tk_mode
+if cat >>"$config" <<EOF
+
+# Local peer's signed certificate in .pem format
+cert $ct_crt
+
+# Local peer's private key in .pem format
+key $pk_key
+
+# Protect TLS session with shared key
+$tk_mode $tk_key
+EOF
+then
+    :
+else
+    append_opts_fatal 'config' 'cert, key' "$tk_mode"
+fi
+
+# Pack configs into archive
+tar --owner=root --group=root -zcf "$archive" "$inst" "$inst.conf" ||
+    fatal 'packing data to tar archive ("%s") failed\n' "$archive"
+
+## Make OpenVPN profile from config. Inline ca, cert, key and $tk_mode
+
+if [ "$OVPN_MODE" = 'client' ]; then
+    # client
+
+    if cat >>"$profile" <<EOF
+
+# Certificate authority (CA) file in .pem format
+<ca>
+$(cat "$ca_crt")
+</ca>
+
+# Local peer's signed certificate in .pem format
+<cert>
+$(cat "$ct_crt")
+</cert>
+
+# Local peer's private key in .pem format
+<key>
+$(cat "$pk_key")
+</key>
+
+# Protect TLS session with shared key
+<$tk_mode>
+$(cat "$tk_key")
+</$tk_mode>
+EOF
+    then
+        :
+    else
+        append_opts_fatal 'profile' 'ca, cert, key' "$tk_mode"
+    fi
+
+    # convert profile from UNIX (LN) to DOS/Windowz (LN+CR)
+    sed -e "s|\$|$(echo -e '\r')|" -i "$profile" ||
+        fatal 'converting profile ("%s") file with sed(1) failed\n' "$profile"
+fi # [ "$OVPN_MODE" = 'client' ]
+
+## Prepare and output report and instructions
+
+# Secret used to compute MAC on URL
+secret="$(lighttpd_secdl_secret)" ||
+    fatal 'unable to get lighttpd %s parameter\n' 'secdownload.secret'
+# Timeout for URL
+timeout="$(lighttpd_secdl_timeout)" ||
+    fatal 'unable to get lighttpd %s parameter\n' 'secdownload.timeout'
+# URI prefix for URL
+uri_prefix="$(lighttpd_secdl_uri_prefix)" ||
+    fatal 'unable to get lighttpd %s parameter\n' 'secdownload.uri-prefix'
+uri_prefix="${uri_prefix#/}"
+
+# Relative path to profile and config archive directory
+rel_path="$IN_EXEC_CA/$OVPN_MODE/$OVPN_CONFIG_NAME"
+
+# Compute secdownload $url, $now, $notBefore and $notAfter
+eval "$(lighttpd_secdl_url "$secret" "$timeout" 'now' "$rel_path" -sha256)" ||
+    fatal 'fail to create lighttpd secdownload URL'
+
+base_url="$OVPN_CONFIGS_URL/$uri_prefix/$url"
+[ "$OVPN_MODE" = 'client' ] &&
+    url="$base_url/$profile" ||
+    url="$base_url/$archive"
+
+# Provide instructions on how configuration is distributed
+cat <<EOF
+OpenVPN $OVPN_MODE configuration available for import/download at:
+
+  $url
+
+for following time period:
+
+  valid from : $(date --date="@$notBefore")
+  valid to   : $(date --date="@$notAfter") <-- must import/download before
+EOF
+
+if [ "$OVPN_MODE" = 'client' ]; then
+    cat <<EOF
+
+Please send user this URL via any communication method (even untrusted),
+provide him with correct credentials to access it if necessary.
+
+Additionally profile and archive with config snippets can be accessed at:
+
+  $base_url
+
+for same time period as profile file (see above).
+
+To successfuly complete OpenVPN profile/config installation on users end
+device (e.g. workstation, laptop, smartphone, tablet, etc.) you need to
+provide PRIVATE KEY password to him.
+
+If possible use communication method other than one used to send profile
+URL to increase security. For example if you send URL with email you may
+use SMS or some other communication channel to send PRIVATE KEY password.
+
+One of the most trusted method to exchange information between parties
+is to use PGP/GPG (GnuPG) or S/MIME for e-mail contents encryption and
+signing. In that case both URL and private key can be send together in
+one encrypted and signed e-mail.
+EOF
+fi
+
+if [ -n "$reuse" ]; then
+    cat <<EOF
+
+You answered YES to private key and certificate signing request reuse
+that implies you known PRIVATE KEY password.
+EOF
+else
+    cat <<EOF
+
+You can find that one on terminal with output like following:
+
+Private key encrypted, password (w/o quotas): '<PRIVATE_KEY_PASSWORD>'
+EOF
+fi
+
+cat <<EOF
+
+In case of password lost for PRIVATE KEY there is NO way to recover it
+and you MUST revoke corresponding certificate using either of commands:
+
+  revoke-full '$KEY_CN.crt' or revoke-full '<serial>.pem'
+
+Never store passwords for private keys somewhere in plain text. Always
+revoke certificates if device with PRIVATE KEY is stolen or lost.
+EOF
+
+# Exit successfuly
+exit 0

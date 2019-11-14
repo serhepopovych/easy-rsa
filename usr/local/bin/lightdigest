@@ -1,0 +1,145 @@
+#!/bin/sh
+
+# Modified from https://redmine.lighttpd.net/projects/lighttpd/wiki/Docs_ModAuth
+
+#set -x
+set -e
+
+pfile='/etc/lighttpd/conf.d/lighttpd.user'
+lockstart=0
+remove=0
+
+# on exit remove lockfile
+trap '[ $lockstart -eq 0 ] || unlock "${pfile}"; rm -f "${tmp_htdigest}"' EXIT
+
+errmsg() {
+    rc=$?
+    echo "$1" > /dev/stderr
+    return $rc
+}
+
+lock() {
+    lockfile="${1}.lock"
+
+    if [ -e "${lockfile}" ]; then
+        errmsg "WARNING: lock file ${lockfile} is already exists"
+        errmsg "         Wait minites for end of previous working ..."
+    fi
+
+    while [ -e "${lockfile}" ]; do
+        sleep 0.5
+    done
+
+    touch "${lockfile}" && lockstart=1
+}
+
+unlock() {
+    lockfile="${1}.lock"
+
+    if [ -e "${lockfile}" ]; then
+        rm -f "${lockfile}"
+        lockstart=0
+    fi
+}
+
+usage() {
+    rc=$?
+
+    prog_name="${0##*/}"
+    errmsg
+    errmsg "$prog_name: lighttpd htdigest password generation program"
+    errmsg "Scripted by JoungKyun.Kim <http://oops.org>"
+    errmsg
+    errmsg "Usage: $prog_name -[hd] -u user -r realm [-f password_file]"
+    errmsg "Options:"
+    errmsg "    -h          print this help messages"
+    errmsg "    -u user     username"
+    errmsg "    -r realm    realm name"
+    errmsg "    -f filename password file [default: $pfile]"
+    errmsg "    -d          remove user"
+    errmsg
+    errmsg "For security reasons password is read from stdin."
+    errmsg
+
+    exit $rc
+}
+
+opts="$(getopt -o 'df:hr:u:' -- "$@")" || usage
+eval set -- "$opts"
+
+while [ $# -ne 0 ]; do
+    case "$1" in
+        -d) remove=1          ;;
+        -f) shift; pfile="$1" ;;
+        -r) shift; realm="$1" ;;
+        -u) shift; user="$1"  ;;
+        --) shift; break      ;;
+    esac
+    shift
+done
+
+#echo $user
+#echo $realm
+#echo $pass
+#echo $pfile
+#echo $remove
+
+[ -n "${user}" ] || errmsg 'ERROR: User is none!!' || usage
+
+lock "${pfile}"
+
+if [ ${remove} -eq 0 ]; then
+    [ -n "${realm}" ] || errmsg 'ERROR: Realm is none!!' || usage
+
+    while [ -z "${pass}" ]; do
+        echo -n 'Input new password (no echo): '
+        stty -echo
+        read -r newpass
+        stty echo
+        echo
+
+        echo -n 'Reinput password for confirm (no echo): '
+        stty -echo
+        read -r renewpass
+        stty echo
+        echo
+
+        if [ "${newpass}" != "${renewpass}" ]; then
+            errmsg 'ERROR: Password is not match'
+            continue
+        fi
+
+        if [ -z "${newpass}" ]; then
+            errmsg 'ERROR: Password cannot be empty'
+            continue
+        fi
+
+        pass="${newpass}"
+    done
+
+    # User Add Mode
+    hash="$(echo -n "${user}:${realm}:${pass}" | md5sum | cut -b -32)"
+else
+    # User Remove Mode
+    hash=''
+fi
+
+tmp_htdigest="$(mktemp -q "${pfile}.XXXXXXXX")"
+
+while IFS=':' read -r u r h end; do
+    {
+      test -n "$end" -o "${u}" != "${user}" -o \
+        \( -n "${realm}" -a "${r}" != "${realm}" \)
+    } || \
+    {
+      test -n "${hash}" && h="${hash}" && hash=''
+    } || continue
+
+    echo "${u}${r:+:$r}${h:+:$h}${end}"
+done <"${pfile}" >"${tmp_htdigest}"
+
+[ -z "${hash}" ] || echo "${user}:${realm}:${hash}" >>"${tmp_htdigest}"
+
+mv -f "${tmp_htdigest}" "${pfile}" && chmod -f g+r "${pfile}"
+
+exit 0

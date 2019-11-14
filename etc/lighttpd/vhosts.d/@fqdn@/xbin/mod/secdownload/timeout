@@ -1,0 +1,31 @@
+#!/bin/sh -ue
+
+# Requires: sed(1)
+
+## mod_secdownload
+
+# Usage: get_param <u> ...
+get_param()
+{
+    local n="${0##*/mod/}"
+    local u="${1:?missing 1st arg to ${n}() (<u>)}" && shift
+
+    local timeout
+
+    # templ: get_param
+    if timeout="$(
+        # limit to 99999s (~1d3h47m)
+        sed 2>/dev/null "$u/mod/$n" \
+            -e '1!q;/^[0-9]\{1,5\}$/!q;p' \
+            -n \
+            #
+    )" && [ -n "$timeout" ]; then
+        :
+    else
+        # default is 3600s (1h)
+        timeout=3600
+    fi
+
+    echo "$timeout"
+}
+get_param "$@"

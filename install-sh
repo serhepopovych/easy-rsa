@@ -1,0 +1,17 @@
+#!/bin/sh -e
+
+# Requires: sed(1)
+
+hostname="${hostname:-easy-rsa}"
+domain="${domain:-example.net}"
+fqdn="${hostname}.${domain}"
+fqdn_regex="$(echo "$fqdn" | sed -n -e 's,\([(){}|.?*+]\|()\),\\\1,pg')"
+
+## Adjust filesystem ownership and permissions
+
+# $ROOT/etc/cron.d/update-crl.crontab
+adj_rights '' 0644 "$ROOT/etc/cron.d/update-crl.crontab"
+# $ROOT/etc/cron.d/update-index-txt.crontab
+adj_rights '' 0644 "$ROOT/etc/cron.d/update-index-txt.crontab"
+
+return 0

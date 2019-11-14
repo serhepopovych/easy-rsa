@@ -1,0 +1,109 @@
+# easy-rsa parameter settings
+
+#
+# This file is not intended to be included
+# directly, but rather from "exec-ca" helper.
+#
+if [ -z "$IN_EXEC_CA" ]; then
+	echo 'This file should be included from "exec-ca"' >&2
+	exit 1
+fi
+
+#
+# These variables should point to
+# the requested executables
+#
+export OPENSSL="openssl"
+export PKCS11TOOL="pkcs11-tool"
+
+# PKCS11 fixes
+export PKCS11_MODULE_PATH=changeme
+export PKCS11_PIN=1234
+
+# This variable points to httpd service hostname.
+export HTTPD_HOSTNAME='@fqdn@'
+
+# These variables may point to shared
+# (e.g. via httpd service) directory
+# and corresponding URL it is published.
+#
+# WARNING: clean-all will do a "rm -rf"
+# on these directories so make sure you
+# define it correctly!
+export SHARED_DIR_BASE="$VARS_DIR/.htdocs/$IN_EXEC_CA"
+export SHARED_URL_BASE="https://$HTTPD_HOSTNAME/~$USER"
+
+
+# This variable should point to
+# the openssl.cnf file included
+# with easy-rsa.
+export KEY_CONFIG="$VARS_DIR/openssl-1.0.0.cnf"
+
+# Edit this variable to point to your
+# soon-to-be-created key directory.
+#
+# WARNING: clean-all will do a "rm -rf"
+# on these directories so make sure you
+# define it correctly!
+export KEY_DIR="$VARS_DIR/$IN_EXEC_CA"
+
+# This will slow down TLS negotiation
+# performance as well as the one-time
+# DH parms generation process.
+export KEY_SIZE=2048
+
+# CA private key passphrase. Could be visible on certain UNIX'es
+# and thus should be given here with caution. See warning in
+# openssl(1) PASS PHRASE ARGUMENTS section.
+#
+# On Linux processes owned by different users cannot view
+# contents of /proc/<pid>environ of each other.
+#
+# Note that this file should not be world/group readable and
+# corresponding warning is given if CA_PASSPHRASE is set.
+export CA_PASSPHRASE='@ca_passphrase@'
+
+# In how many days should the root CA key expire?
+export CA_EXPIRE=3650
+
+# In how many days should certificates expire?
+export KEY_EXPIRE=365
+
+# These are the default values for fields
+# which will be placed in the certificate.
+# Don't leave any of these fields blank.
+export KEY_COUNTRY='UA'
+export KEY_PROVINCE='Kyivska'
+export KEY_CITY='Kyiv'
+export KEY_ORG='@domain@'
+export KEY_EMAIL='noc@@domain@'
+export KEY_CN="${KEY_CN:-}"
+export KEY_NAME="${KEY_NAME:-}"
+export KEY_OU='WebServices'
+export KEY_MD='sha256'
+export KEY_SAN=''
+export KEY_PASSPHRASE=''
+
+# These are pointing to shared (e.g. served via httpd)
+# directory and it's URL.
+export SHARED_CA_DIR="${SHARED_DIR_BASE:+$SHARED_DIR_BASE/ca}"
+export SHARED_CA_URL="${SHARED_URL_BASE:+$SHARED_URL_BASE/$IN_EXEC_CA/ca}"
+
+
+# OpenVPN mkconfig environment variables.
+# To disable OpenVPN mkconfig make OVPN_DIR
+# empty or comment out.
+#export OVPN_DIR="$EASY_RSA/extensions/openvpn"
+export OVPN_DIR=''
+export OVPN_REMOTE='ovpn.@domain@'
+export OVPN_PORT='1194'
+export OVPN_PROTO='udp'
+# Base directory of --capath on server
+export OVPN_CA_PATH="${OVPN_DIR:+/etc/openvpn}"
+# Base URL to fetch CA and CRL bundles
+export OVPN_CA_URL="${OVPN_DIR:+$SHARED_CA_URL}"
+
+# These are pointing to shared (e.g. served via httpd)
+# directory and it's URL.
+export SHARED_OVPN_DIR="${OVPN_DIR:+${SHARED_DIR_BASE-}}"
+export SHARED_OVPN_URL="${OVPN_DIR:+${SHARED_URL_BASE-}}"

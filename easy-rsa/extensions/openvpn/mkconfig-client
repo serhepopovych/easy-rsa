@@ -1,0 +1,18 @@
+#!/bin/sh
+
+# Requires: readlink(1)
+
+if [ ! -e "$0" -o "$0" -ef "/proc/$$/exe" ]; then
+    # Executed script is
+    #  a) read from stdin through pipe
+    #  b) specified via -c option
+    #  d) sourced
+    this='mkconfig-client'
+else
+    # Executed script exists and it's inode differs
+    # from process exe symlink (Linux specific)
+    this="$0"
+fi
+this="$(readlink -f "$this")"
+
+exec "${this%/*}/mkconfig" --mode client "$@"
