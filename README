@@ -1,0 +1,98 @@
+Easy-RSA 2.x based on original Easy-RSA 2.0-rc1 found in OpenVPN 2.x branch
+===========================================================================
+
+From easy-rsa/README-2.0:
+-------------------------
+
+  This is a small RSA key management package, based on the openssl
+  command line tool, that can be found in the easy-rsa subdirectory
+  of the OpenVPN distribution.  While this tool is primary concerned
+  with key management for the SSL VPN application space, it can also
+  be used for building web certificates.
+
+This work initially based on original EASY-RSA 2.0-rc1 found in openvpn-2.2.1
+package from Debian GNU/Linux 7.x (wheezy). However development is moved then
+to https://github.com/OpenVPN/easy-rsa/tree/release/2.x which is closed now.
+
+Main objectives for this reimplementation are following:
+--------------------------------------------------------
+  o Support CRL for intermediate CAs at any depth
+  o Support for multiple subjectAltName (Subject Alternative Names, SAN)
+  o Seamless certificate reissue with same subjectName and private key
+  o OpenVPN profile (file.ovpn) for Android/iOS/MacOS/Windows clients
+    and config directory for Linux/BSD systems (both client and server)
+  o Lighttpd with TLS/SSL and mod_secdownload support for secure
+    client/server certificates (not implemented, PKCS#12 could be used
+    for this purpose as single container for everything), CA certificate,
+    CRLs and OpenVPN profiles/configuration (primary focus) distribution
+    to end users
+  o Multi-user support (could be useful for study purposes)
+  o RSA 2048 bit keys and SHA256 by default
+  o Revised security. Passwords passed via environment, sane filesystem
+    permissions and ownership, private keys always encrypted with
+    random passphrase generated from /dev/urandom, helper to run CA
+    commands in pristine environment
+  o Helpers to list OpenSSL index.txt certificate database
+  o Arhcive expired certificates to keep index.txt small automatically
+  o Misc improvements and bugfixes to pkitool a core utility
+
+
+Installation
+------------
+
+Use standard installsh steps:
+
+  $ cd /tmp
+  $ git clone --recursive https://github.com/serhepopovych/easy-rsa
+  $ cd easy-rsa
+  $ sudo ./deploy.sh -d 'opt'
+
+Note due to missing functionality installsh that expands templates in
+directory/file names you must rename directoriles/files with templates
+manually. For example
+
+  $ sudo mv -f /etc/lighttpd/vhosts.d/@fqdn@ \
+               /etc/lighttpd/vhosts.d/easy-rsa.example.net \
+               #
+
+Since easy-rsa supports multiuser configurations, no user by default has
+preconfigured easy-rsa/ in it's home directory at creation time because
+no easy-rsa/ installed in /etc/skel, you must manually copy skeleton
+from <install_dir>/easy-rsa/skel/* to user home directory:
+
+  $ sudo useradd -c 'PKI certificate management user' -m certmgr
+  $ sudo -u certmgr -i cp -a /opt/easy-rsa/skel/easy-rsa ~certmgr
+
+Now to make user specific easy-rsa installation visible to lighttpd put
+symlink to user home directory
+
+  $ sudo ln -sf ~certmgr \
+      /etc/lighttpd/vhosts.d/easy-rsa.example.net/users.d/certmgr \
+      #
+
+Usage
+-----
+
+  # Build self-signed RootCA certificate
+  $ /opt/easy-rsa/exec-ca KEY_CN='Example.Net RootCA' --runas certmgr -- \
+      RootCA build-ca --keysize 4096 RootCA
+
+  # Build child CAs: webCA and ovpnCA
+  $ /opt/easy-rsa/exec-ca \
+      KEY_CN='OpenVPN Intermediate CA' --runas certmgr -- \
+      RootCA build-inter --keysize 4096 ovpnCA
+  $ /opt/easy-rsa/exec-ca \
+      KEY_CN='WebServices Intermediate CA' --runas certmgr -- \
+      RootCA build-inter --keysize 4096 webCA
+
+  # Build OpenVPN server certificate, profile and configuration
+  $ /opt/easy-rsa/exec-ca --runas certmgr -- ovpnCA \
+      ovpn-mkconfig-server 'vpn.example.net'
+
+  # Build OpenVPN client certificate and profile
+  $ /opt/easy-rsa/exec-ca --runas certmgr -- ovpnCA \
+      ovpn-mkconfig-client 'Test user'
+
+  # Remove all certificates (including CA certificate itself) issued
+  # by this and all child CAs; cleans up index.txt database
+  $ /opt/easy-rsa/exec-ca --runas certmgr -- RootCA clean-all
