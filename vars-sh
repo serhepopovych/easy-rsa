@@ -3,16 +3,16 @@
 hostname="${hostname:-easy-rsa}"
 domain="${domain:-example.net}"
 fqdn="${hostname}.${domain}"
-fqdn_regex="$(echo "$fqdn" | sed -n -e 's,\([(){}|.?*+]\|()\),\\\1,pg')"
+fqdn_regex="$(echo "$fqdn" | sed -n -e 's,\([(){}|.?*+]\|()\),\\\\\1,pg')"
 
 # Project data
 DESTS='/easy-rsa'
 
 SUBST_TEMPLATES="$SUBST_TEMPLATES"'
--e "s|@hostname@|$hostname|g"
--e "s|@domain@|$domain|g"
--e "s|@fqdn@|$fqdn|g"
--e "s|@fqdn_regex@|$fqdn_regex|g"
+-e "s,@hostname@,$hostname,g"
+-e "s,@domain@,$domain,g"
+-e "s,@fqdn@,$fqdn,g"
+-e "s,@fqdn_regex@,$fqdn_regex,g"
 '
 
 # Inherit subproject(s) variables
