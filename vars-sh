@@ -2,5 +2,12 @@
 # Project data
 DESTS='/easy-rsa'
 
+SUBST_TEMPLATES="$SUBST_TEMPLATES"'
+-e "s|@hostname@|$hostname|g"
+-e "s|@domain@|$domain|g"
+-e "s|@fqdn@|$fqdn|g"
+-e "s|@fqdn_regex@|$fqdn_regex|g"
+'
+
 # Inherit subproject(s) variables
 inherit 'installsh/vars-sh'
