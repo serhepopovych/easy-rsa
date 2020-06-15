@@ -14,7 +14,6 @@ if [ -L "$f" ]; then
     rm -f "$f" ||:
     ln -sf . "$f"
 fi
-unset f
 
 ## Adjust filesystem ownership and permissions
 
@@ -22,5 +21,15 @@ unset f
 adj_rights '' 0644 "$ROOT/etc/cron.d/update-crl.crontab"
 # $ROOT/etc/cron.d/update-index-txt.crontab
 adj_rights '' 0644 "$ROOT/etc/cron.d/update-index-txt.crontab"
+
+# $ROOT/etc/logrotate.d/lighttpd-@fqdn@
+f="$ROOT/etc/logrotate.d/lighttpd-$fqdn"
+if [ -f "$f" ]; then
+    adj_rights '' 0644 "$f"
+fi
+
+## Cleanup namespace
+
+unset f
 
 return 0
