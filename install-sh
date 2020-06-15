@@ -1,11 +1,6 @@
 #!/bin/sh -e
 
-# Requires: sed(1), rm(1), ln(1)
-
-hostname="${hostname:-easy-rsa}"
-domain="${domain:-example.net}"
-fqdn="${hostname}.${domain}"
-fqdn_regex="$(echo "$fqdn" | sed -n -e 's,\([(){}|.?*+]\|()\),\\\1,pg')"
+# Requires: rm(1), ln(1)
 
 ## Make xbin symlink
 
