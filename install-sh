@@ -1,11 +1,20 @@
 #!/bin/sh -e
 
-# Requires: sed(1)
+# Requires: sed(1), rm(1), ln(1)
 
 hostname="${hostname:-easy-rsa}"
 domain="${domain:-example.net}"
 fqdn="${hostname}.${domain}"
 fqdn_regex="$(echo "$fqdn" | sed -n -e 's,\([(){}|.?*+]\|()\),\\\1,pg')"
+
+## Make xbin symlink
+
+f="$TARGET/easy-rsa/extensions/xbin"
+if [ -L "$f" ]; then
+    rm -f "$f" ||:
+    ln -sf . "$f"
+fi
+unset f
 
 ## Adjust filesystem ownership and permissions
 
