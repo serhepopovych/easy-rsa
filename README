@@ -71,6 +71,34 @@ symlink to user home directory
       /etc/lighttpd/vhosts.d/easy-rsa.example.net/users.d/certmgr \
       #
 
+Note that on SELinux enforced systems (e.g. RHEL/CentOS) you need to add
+following configuration:
+
+  # Make sure policycoreutils installed
+  $ sudo yum install -y policycoreutils
+
+  # Allow setrlimit for lighttpd process
+  $ sudo setsebool -P httpd_setrlimit 1
+
+  # Allow access to user home directories for mod_userdir
+  $ sudo setsebool -P httpd_read_user_content 1
+
+  # Allow lighttpd to execute xbin/* and xbin/mod/*/* helpers
+  $ sudo cat > ~/comm_lighttpd_users_conf_sh.te <<'_EOF'
+
+module comm_lighttpd_users_conf_sh 1.0;
+
+require {
+        type httpd_config_t;
+        type httpd_t;
+        class file { execute execute_no_trans };
+}
+
+#============= httpd_t ==============
+allow httpd_t httpd_config_t:file { execute execute_no_trans };
+_EOF
+  $ sudo semodule -i comm_lighttpd_users_conf_sh.pp
+
 Usage
 -----
 
