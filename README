@@ -62,11 +62,12 @@ from <install_dir>/easy-rsa/skel/* to user home directory:
 
   $ sudo useradd -c 'PKI certificate management user' -m certmgr
   $ sudo -u certmgr -i cp -a /opt/easy-rsa/skel/easy-rsa ~certmgr
+  $ sudo -u certmgr -i chown -R certmgr:certmgr ~certmgr/easy-rsa
 
 Now to make user specific easy-rsa installation visible to lighttpd put
 symlink to user home directory
 
-  $ sudo ln -sf ~certmgr \
+  $ sudo ln -sf ~certmgr/easy-rsa/.htconf \
       /etc/lighttpd/vhosts.d/easy-rsa.example.net/users.d/certmgr \
       #
 

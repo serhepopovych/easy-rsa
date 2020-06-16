@@ -60,7 +60,7 @@ for u in users.d/*; do
     # templ: user
     user="${u##*/}"
     # templ: home
-    eval "home=~$user" && [ "$home" -ef "$u" ] || continue
+    eval "home=~$user" && [ "$home/easy-rsa/.htconf" -ef "$u" ] || continue
     # templ: users_dir
     users_dir="${PWD}/${u%/*}"
 
@@ -112,10 +112,12 @@ else }\$HTTP[\"url\"] =~ \"^/~$user\" + url_suffix_regex {$config}"
 done
 
 # Append "else { url.access-deny = ( "" ) }"
-text="${text:+$text
+if [ -n "$text" ]; then
+    text="$text
 else {
   url.access-deny = ( \"\" )
-}}"
+}"
+fi
 
 # Output user configuration
 echo "$text"
