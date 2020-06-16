@@ -1,19 +1,28 @@
 
-# Install vars
-hostname="${hostname:-easy-rsa}"
-domain="${domain:-example.net}"
-fqdn="${hostname}.${domain}"
-fqdn_regex="$(echo "$fqdn" | sed -n -e 's,\([(){}|.?*+]\|()\),\\\\\1,pg')"
-
 # Project data
 DESTS='/easy-rsa'
 
-SUBST_TEMPLATES="$SUBST_TEMPLATES"'
--e "s,@hostname@,$hostname,g"
--e "s,@domain@,$domain,g"
--e "s,@fqdn@,$fqdn,g"
--e "s,@fqdn_regex@,$fqdn_regex,g"
-'
-
 # Inherit subproject(s) variables
 inherit 'installsh/vars-sh'
+
+# Install vars
+hostname="${hostname:-easy-rsa}" &&
+if [ -z "${hostname##*[^a-zA-Z0-9._-]*}" ]; then
+    echo >&2 "$prog_name: invalid characters in hostname"
+    exit 1
+fi
+domain="${domain:-example.net}"
+if [ -z "${domain##*[^a-zA-Z0-9._-]*}" ]; then
+    echo >&2 "$prog_name: invalid characters in domain"
+    exit 1
+fi
+fqdn="${hostname}.${domain}"
+fqdn_regex="${fqdn_regex:-$(echo "$fqdn" | sed -n -e 's,\(\.\),\\\\\1,pg')}"
+
+SUBST_TEMPLATES="$SUBST_TEMPLATES"'
+-e "s|@hostname@|$hostname|g"
+-e "s|@domain@|$domain|g"
+-e "s|@fqdn@|$fqdn|g"
+-e "s|@fqdn_regex@|$fqdn_regex|g"
+'
+
