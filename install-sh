@@ -12,16 +12,24 @@ fi
 
 ## Adjust filesystem ownership and permissions
 
+t="$ROOT/etc/logrotate.d/lighttpd-$fqdn"
+[ ! -f "$t" ] || adj_rights '' 0644 "$t"
+
 t="$ROOT/etc/cron.d/update-crl.crontab"       && adj_rights '' 0644 "$t"
 t="$ROOT/etc/cron.d/update-index-txt.crontab" && adj_rights '' 0644 "$t"
 
-t="$ROOT/etc/logrotate.d/lighttpd-$fqdn"
-[ ! -f "$t" ] || adj_rights '' 0644 "$t"
+for t in "$TARGET/easy-rsa/skel/easy-rsa"/vars-*; do
+    adj_rights '' 0600 "$t"
+    adj_rights '' 0700 "${t%/vars-*}/${t##*/vars-}"
+done
 
 { u='www-data' && id "$u" >/dev/null 2>&1; } ||
 { u='lighttpd' && id "$u" >/dev/null 2>&1; } || u=''
 
 if [ -n "$u" ]; then
+    # $TARGET/easy-rsa/skel/easy-rsa
+    adj_rights ":$u" 0710 "$t"
+
     t="$ROOT/var/log/lighttpd/$fqdn"
     [ ! -d "$t" ] || adj_rights "$u:$u" 0750 "$t"
     t="$t/access.log"
