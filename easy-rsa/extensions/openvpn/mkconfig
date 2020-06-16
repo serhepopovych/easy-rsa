@@ -13,7 +13,7 @@ fi
 
 # Exit if OpenVPN config isn't managed for this CA
 if [ -z "${OVPN_DIR-}" ]; then
-    printf >&2 -- 'OpenVPN configuration is not enabled for this CA'
+    printf >&2 -- 'OpenVPN configuration is not enabled for this CA\n'
     exit 0
 fi
 
