@@ -60,9 +60,34 @@ preconfigured easy-rsa/ in it's home directory at creation time because
 no easy-rsa/ installed in /etc/skel, you must manually copy skeleton
 from <install_dir>/easy-rsa/skel/* to user home directory:
 
+  # Add user
   $ sudo useradd -c 'PKI certificate management user' -m certmgr
+
+  # Copy skeleton
   $ sudo -u certmgr -i cp -a /opt/easy-rsa/skel/easy-rsa ~certmgr
+
+  # Adjust ownership and permissions (for both certmgr and lighttpd user)
   $ sudo -u certmgr -i chown -R certmgr:certmgr ~certmgr/easy-rsa
+  $ u='www-data' && id "$u" >/dev/null 2>&1 || \
+    u='lighttpd' && id "$u" >/dev/null 2>&1 || \
+    u=''
+  $ [ -z "$u" ] || sudo -u root -i chown :$u ~certmgr/easy-rsa
+  $ sudo -u root -i chmod 0710 ~certmgr/easy-rsa
+
+  $ if [ -n "$u" ]; then                             \
+      t="$(stat -c '%a' ~certmgr)" &&                \
+      while [ ${#t} -gt 2 ]; do t="${t#[0-9]}"; done \
+                                                     \
+      if [ $((t & 001)) -ne 0 ]; then                \
+        :                                            \
+      elif [ $((t & 010)) -ne 0 ]; then              \
+        [ "$(stat -c '%G')" = "$u" ] ||              \
+          sudo -u certmgr -i chmod o+x ~certmgr      \
+      else                                           \
+        sudo -u certmgr -i chown :$u ~certmgr        \
+        sudo -u certmgr -i chmod g+x ~certmgr        \
+      fi                                             \
+    fi
 
 Now to make user specific easy-rsa installation visible to lighttpd put
 symlink to user home directory
