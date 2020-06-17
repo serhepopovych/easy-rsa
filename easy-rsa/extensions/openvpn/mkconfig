@@ -468,7 +468,7 @@ t="$tools/decrypt-pkey" && make_copy "$EASY_RSA/decrypt-pkey" "$t" &&
 
 # logrotate
 if t="$tools/logrotate" && cat >"$t" <<EOF
-$logdir/*.log {
+$logdir/$inst.log {
 	weekly
 	rotate 10
 	copytruncate

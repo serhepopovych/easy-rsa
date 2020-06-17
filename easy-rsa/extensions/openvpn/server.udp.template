@@ -15,7 +15,7 @@ verb 3
 #mute 2
 
 ## Logging
-#log-append %logdir%
+#log-append %logdir%/%inst%.log
 
 # Basic settings
 proto udp6
@@ -115,7 +115,7 @@ client-config-dir %ccd%
 #ccd-exclusive
 
 # Maintain persistent client to ip mapping
-ifconfig-pool-persist ipp.txt
+ifconfig-pool-persist %inst%/ipp.txt
 
 tun-mtu-extra 32
 
