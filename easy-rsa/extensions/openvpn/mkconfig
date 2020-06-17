@@ -36,7 +36,7 @@ Options:
   --proto    : Protocol used to connect to peer (default: udp)
   --mode     : Mode used to connect to peer (default: client)
 
-  --instance : Instance name to use as subdirectory name (default: --mode)
+  --instance : Instance name to use as subdirectory name (default: mode-proto)
   --newkey   : Force new private key creation (default: no)
 
   --help|--usage
