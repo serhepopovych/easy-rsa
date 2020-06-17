@@ -95,8 +95,9 @@ tcp-queue-limit 256
 ## Avoid poll()/epoll()/select() before writing to the tun device (udp only)
 #fast-io
 
-## Notify clients on server exit/restart (udp only, no need for tcp)
-#explicit-exit-notify
+## Notify on exit/restart (udp only, no need for tcp)
+#explicit-exit-notify 2
+#push "explicit-exit-notify"
 
 ## Prevent process memory from being swapped out
 #mlock
