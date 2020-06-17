@@ -34,7 +34,7 @@ CA_FILES='ca.crt crl.pem'
 # production environments too.
 #
 # See wget(1) for more information on available options.
-WGET_OPTS='--tries=5 --timeout=30 --prefer-family=IPv4'
+WGET_OPTS='--quiet --tries=5 --timeout=30 --prefer-family=IPv4'
 
 # Event handlers
 
