@@ -37,6 +37,8 @@ float
 #script-security 2
 #up "%scripts%/up.sh"
 #down "%scripts%/down.sh"
+#client-connect "%scripts%/connect.sh"
+#client-disconnect "%scripts%/disconnect.sh"
 
 # Tell OpenVPN to be a multi-client server
 topology subnet

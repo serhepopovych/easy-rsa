@@ -145,6 +145,7 @@ include="$inst/include"
 pki="$inst/pki"
 scripts="$inst/scripts"
 tools="$inst/tools"
+xbin="$inst/xbin"
 
 route_default="$include/route-defaut"
 route_split="$include/route-split"
@@ -297,7 +298,7 @@ unset templ
 
 ## Populate temporary config directory
 
-install -d "$ccd" "$include" "$pki" "$scripts" "$tools" ||
+install -d "$ccd" "$include" "$pki" "$scripts" "$tools" "$xbin" ||
     fatal 'cannot create config subdirectories\n'
 
 # Try "tls-crypt" key first, then "tls-auth" and gen-tls-auth-key if missing
@@ -460,6 +461,46 @@ _EOF
     else
         fatal 'creating "%s" file failed\n' "$t"
     fi
+
+    # Add connect.sh script
+    if t="$scripts/connect.sh" && cat >"$t" <<EOF
+#!/bin/sh -e
+
+exec $xbin/ip route replace "\$ifconfig_pool_remote_ip" dev "\$dev" proto dhcp
+EOF
+    fi
+
+    # Add disconnect.sh script
+    if t="$scripts/disconnect.sh" && cat >"$t" <<EOF
+#!/bin/sh -e
+
+exec $xbin/ip route delete "\$ifconfig_pool_remote_ip" dev "\$dev" proto dhcp
+EOF
+    fi
+
+    if t="$xbin/README" && cat >"$t" <<EOF
+This directory intended to store copies of system binaries (e.g.
+ip(8) from iproute package) with special configuration like
+file capabilities.
+
+Since nothing tracks these copies (i.e. yum/dnf) they can be out
+of date and potentially contain bugs (including security) that
+already fixed in installed with updated package system binary.
+
+Copies installed with install(8) utility with owning group set to
+openvpn to make them executable only by that group members:
+
+  install -o root -g openvpn -m 0750 /sbin/ip $xbin/ip
+
+File capabilities could be configured with following command
+
+  setcap cap_net_admin=ep $xbin/ip
+
+For ip(8) utility example shown above NET_ADMIN capability enabled
+in effective and permitted set to make network stack management
+possible by non-privileged openvpn user. This is similar to SUID
+bit on binary except capability set is limited to NET_ADMIN.
+EOF
 fi # [ "$OVPN_MODE" != 'client' ]
 
 # decrypt-pkey
