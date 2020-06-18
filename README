@@ -108,8 +108,14 @@ following configuration:
   # Allow access to user home directories for mod_userdir
   $ sudo setsebool -P httpd_read_user_content 1
 
+  # Make sure policycoreutils-python or
+  # policycoreutils-python-utils installed
+  $ sudo yum install policycoreutils-python || \
+    sudo yum install policycoreutils-python-utils
+
   # Allow lighttpd to execute xbin/* and xbin/mod/*/* helpers
-  $ sudo cat > ~/comm_lighttpd_users_conf_sh.te <<'_EOF'
+  $ cd ~
+  $ cat >comm_lighttpd_users_conf_sh.te <<'_EOF'
 
 module comm_lighttpd_users_conf_sh 1.0;
 
@@ -122,6 +128,11 @@ require {
 #============= httpd_t ==============
 allow httpd_t httpd_config_t:file { execute execute_no_trans };
 _EOF
+  $ checkmodule -M -m -o comm_lighttpd_users_conf_sh.mod \
+      comm_lighttpd_users_conf_sh.te
+  $ semodule_package -o comm_lighttpd_users_conf_sh.pp -m \
+      comm_lighttpd_users_conf_sh.mod
+  $ sudo semodule -r comm_lighttpd_users_conf_sh
   $ sudo semodule -i comm_lighttpd_users_conf_sh.pp
 
 Usage
