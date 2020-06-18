@@ -176,7 +176,7 @@ pk_file="$KEY_DIR/$KEY_CN.key"
 
 # Build CA if not already done
 (V=0 valid_file "$ca_file") ||
-    (KEY_CN='ovpnCA' KEY_NAME='ovpnCA' "$EASY_RSA/build-ca") || exit
+    (KEY_CN='OpenVPN CA' "$EASY_RSA/build-ca" 'ovpnCA') || exit
 
 # Build cert and key if not already done
 if [ -z "$OPT_NEWKEY" -a -s "$cs_file" -a -s "$pk_file" ]; then
