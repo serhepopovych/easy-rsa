@@ -36,7 +36,6 @@ Main objectives for this reimplementation are following:
   o Arhcive expired certificates to keep index.txt small automatically
   o Misc improvements and bugfixes to pkitool a core utility
 
-
 Installation
 ------------
 
@@ -138,6 +137,46 @@ _EOF
 Usage
 -----
 
+$ /opt/easy-rsa/exec-ca --help
+usage: /opt/easy-rsa/exec-ca [NAME=VAL...] [options] [--] <ca> <command> [<args> ...]
+
+  options : options for exec-ca
+
+    --runas   run as specified user instead of current (i.e. $USER)
+    --help|--usage
+              this help message
+    --version this program version
+
+  ca      : the CA directory (KEY_DIR) of the PKI to run command on
+  command : command to run with PKI environment read from vars-<ca>
+  args    : (optional) arguments to <command>
+
+Example: /opt/easy-rsa/exec-ca webCA build-ca (build webCA)
+         /opt/easy-rsa/exec-ca webCA (execute $SHELL with environment from vars-webCA)
+
+$ /opt/easy-rsa/exec-ca --runas certmgr ovpnCA ovpn-mkconfig-client --help
+Usage: mkconfig [options] <CommonName>
+Options:
+  --remote   : Remote OpenVPN peer hostname or IP address
+  --port     : Port to use on remote OpenVPN host (default: 1194)
+  --proto    : Protocol used to connect to peer (default: udp)
+  --mode     : Mode used to connect to peer (default: client)
+
+  --instance : Instance name to use as subdirectory name (default: --mode)
+  --newkey   : Force new private key creation (default: no)
+
+  --help|--usage
+             : This help message
+
+  --version  : This program version
+
+<CommonName> is a X.509 "Common Name" used to distinguish peer.
+It can be either hostname when --mode is "server" or legal name
+of user when --mode is "client".
+
+Examples
+--------
+
   # Build self-signed RootCA certificate
   $ /opt/easy-rsa/exec-ca KEY_CN='Example.Net RootCA' --runas certmgr -- \
       RootCA build-ca --keysize 4096 RootCA
@@ -161,3 +200,16 @@ Usage
   # Remove all certificates (including CA certificate itself) issued
   # by this and all child CAs; cleans up index.txt database
   $ /opt/easy-rsa/exec-ca --runas certmgr -- RootCA clean-all
+
+  # Enter interactive shell with pristine environment and $PATH
+  # pointing to /opt/easy-rsa and extensions/xbin.
+  $ /opt/easy-rsa/exec-ca --runas certmgr ovpnCA
+
+  # list certificates issued by authority (from openssl index.txt file)
+  easy-rsa:ovpnCA> list-index-txt
+  # show CRL (Certificate Revocation List)
+  easy-rsa:ovpnCA> list-crl
+  # build OpenVPN client certificate and profile
+  easy-rsa:ovpnCA> ovpn-mkconfig-client 'Test user2'
+  # revoke previously build OpenVPN client certificate
+  easy-rsa:ovpnCA> revoke-full 'Test user2'
