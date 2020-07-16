@@ -127,6 +127,9 @@ for_each_user_ca()
 		eval "VARS_DIR=~$u/easy-rsa" && [ -d "$VARS_DIR" ] || continue
 
 		for ca in "$VARS_DIR/vars-"*; do
+			# Skip backups
+			[ -n "${ca##*\~}" -a -n "${ca##\#*\#}" ] || continue
+			# File is readable
 			[ -f "$ca" -a -r "$ca" ] || continue
 
 			IN_EXEC_CA="${ca##*/vars-}"
