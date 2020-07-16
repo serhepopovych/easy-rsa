@@ -158,8 +158,25 @@ pwmake()
 
 ################################################################################
 
-# Set program name
-[ -n "${prog_name-}" ] || prog_name="${0##*/}"
+this_prog='easy-rsa-lib.sh'
+
+if [ ! -e "$0" -o "$0" -ef "/proc/$$/exe" ]; then
+    # Executed script is
+    #  a) read from stdin through pipe
+    #  b) specified via -c option
+    #  d) sourced
+    this="$this_prog"
+    this_dir='./'
+else
+    # Executed script exists and it's inode differs
+    # from process exe symlink (Linux specific)
+    this="$0"
+    this_dir="${this%/*}/"
+fi
+this_dir="$(cd "$this_dir" && echo "$PWD")"
+
+# Set program name unless already set
+[ -n "${prog_name-}" ] || prog_name="${this##*/}"
 
 # Set program (Easy-RSA bundle) version
 prog_version='2.7'
@@ -168,9 +185,9 @@ prog_version='2.7'
 umask $(printf -- '%04o\n' $(($(umask) | 0022))) ||:
 
 # Check for environment variables file correctness
-[ -n "$KEY_DIR" ] ||
-    abort 'easy-rsa-lib.sh: no KEY_DIR variable defined.
+[ -n "${KEY_DIR-}" ] ||
+    abort "$this_prog: no KEY_DIR variable defined.
 
-Make sure you are running via "exec-ca <ca> ..."
-with <ca> pointing to valid "vars-<ca>" file.
-'
+Make sure you are running via \"exec-ca <ca> ...\"
+with <ca> pointing to valid \"vars-<ca>\" file.
+"
