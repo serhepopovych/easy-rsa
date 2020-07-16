@@ -131,8 +131,8 @@ for_each_user_ca()
 
 			IN_EXEC_CA="${ca##*/vars-}"
 
-			# Re-exec itself with clean environment
-			env_exec --runas "$u" \
+			# Restart itself with clean environment
+			env_run --runas "$u" \
 				"IN_EXEC_CA=$IN_EXEC_CA" \
 				"EASY_RSA=$EASY_RSA" \
 				"VARS_DIR=$VARS_DIR" \
