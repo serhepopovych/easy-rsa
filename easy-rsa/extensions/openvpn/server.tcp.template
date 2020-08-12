@@ -77,7 +77,7 @@ push "dhcp-option DISABLE-NBT"
 
 # Force windowz to use new DNS server and prevent DNS leak
 push "register-dns"
-push "block-outside-dns"
+#push "block-outside-dns"
 
 # Keep TUN devices and keys open across restarts
 persist-tun
