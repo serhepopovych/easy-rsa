@@ -435,10 +435,10 @@ EOF
 #!/bin/sh -e
 
 ## vrf-lite
-#/sbin/ip link set dev "$1" master vrf-vpn ||:
+#/sbin/ip link set dev "$1" master vrf-vpn up ||:
 
 ## ... pre vrf-lite config
-#/sbin/ip link set dev "$1" group downlink ||:
+#/sbin/ip link set dev "$1" group downlink up ||:
 #RT="$(ipcalc -bn "$4/$5" |sed -ne 's/^Network:\s\+\([0-9./]\+\)\s*$/\1/p')"
 #ip -4 route replace "$RT" dev "$1" proto vpn scope link table vrf-vpn src "$4"
 

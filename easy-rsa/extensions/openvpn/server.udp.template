@@ -45,11 +45,15 @@ topology subnet
 server 203.0.113.0 255.255.255.0
 server-ipv6 2001:db8:ffff::/64
 
+## Do not execute ifconfig/route
+#ifconfig-noexec
+#route-noexec
+
 ## Create route(s) to networks behind clients
 #route 198.51.100.0 255.255.255.0
 #route-ipv6 2001:db8:ffff:100::/56
 
-# Push routes or redirect gateway
+## Push routes or redirect gateway
 #push "route <network/ip> <netmask> <gateway>"
 #push "route-ipv6 <ipv6addr>/<bits> <gateway>"
 
