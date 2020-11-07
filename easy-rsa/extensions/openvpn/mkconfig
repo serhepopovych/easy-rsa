@@ -468,6 +468,8 @@ _EOF
 
 exec $xbin/ip route replace "\$ifconfig_pool_remote_ip" dev "\$dev" proto dhcp
 EOF
+    then
+        :
     fi
 
     # Add disconnect.sh script
@@ -476,6 +478,8 @@ EOF
 
 exec $xbin/ip route delete "\$ifconfig_pool_remote_ip" dev "\$dev" proto dhcp
 EOF
+    then
+        :
     fi
 
     if t="$xbin/README" && cat >"$t" <<EOF
@@ -501,6 +505,9 @@ in effective and permitted set to make network stack management
 possible by non-privileged openvpn user. This is similar to SUID
 bit on binary except capability set is limited to NET_ADMIN.
 EOF
+    then
+        :
+    fi
 fi # [ "$OVPN_MODE" != 'client' ]
 
 # decrypt-pkey
