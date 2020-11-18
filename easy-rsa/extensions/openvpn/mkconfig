@@ -147,7 +147,7 @@ scripts="$inst/scripts"
 tools="$inst/tools"
 xbin="$inst/xbin"
 
-route_default="$include/route-defaut"
+route_default="$include/route-default"
 route_split="$include/route-split"
 
 logdir='/var/log/openvpn'
