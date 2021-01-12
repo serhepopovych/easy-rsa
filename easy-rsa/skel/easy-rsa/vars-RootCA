@@ -64,10 +64,10 @@ export KEY_SIZE=2048
 export CA_PASSPHRASE='@ca_passphrase@'
 
 # In how many days should the root CA key expire?
-export CA_EXPIRE=3650
+export CA_EXPIRE=${CA_EXPIRE:-3650}
 
 # In how many days should certificates expire?
-export KEY_EXPIRE=365
+export KEY_EXPIRE=${KEY_EXPIRE:-365}
 
 # These are the default values for fields
 # which will be placed in the certificate.
