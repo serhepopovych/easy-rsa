@@ -55,7 +55,7 @@ elif [ -z "$PARENT_KEY_DIR" ]; then
 	    "$EASY_RSA/pkitool" 3>&1 >&4 \
 	        --sign --interact --inter --pass "$@" | cat
 	) && [ -s "$KEY_DIR/$FN.crt" ] || exit
-	exec >&4-
+	exec 4>&-
 
 	# New csr/pkey generated: KEY_PHASPHRASE was used save it
 	if [ $DO_REQ -eq 1 ]; then
