@@ -28,8 +28,9 @@ make_bundle()
 
 	# make sure <bundle> is absolute path if not so
 	# and initialize temporary bundle file
-	if  bundle="$(readlink -m "${bundle}")" && \
-	    bundle_tmp="$(mktemp "${bundle}.XXXXXXXX")"; then
+	if bundle="$(readlink -m "${bundle}")" &&
+	   bundle_tmp="$(mktemp "${bundle}.XXXXXXXX")"
+	then
 		bundle_name="${bundle##*/}"
 	else
 		rc=$?
@@ -38,6 +39,9 @@ make_bundle()
 	fi
 
 	while :; do
+		# <file> is optional
+		cat "${file}" >>"${bundle_tmp}" || break
+
 		# it is supposed to be a symlink to parent <dir> with <file>
 		[ -L 'parent' ] || break
 
@@ -49,34 +53,21 @@ make_bundle()
 
 		# optimization: use <bundle> if it is valid
 		if [ -z "$force"] && (V=0 valid_file "${bundle_name}"); then
-			cat "${bundle_name}" >"${bundle_tmp}" ||:
-			cd .. ||:
+			cat "${bundle_name}" >>"${bundle_tmp}" ||:
 			break
 		fi
 	done
 
-	# concatenate <file> from root to <dir>
-	while :; do
-		# <file> is optional
-		cat "${file}" >>"${bundle_tmp}" ||:
-
-		# stop at <dir>
-		[ ! '.' -ef "${dir}" ] || break
-
-		if cd ..; then
-			continue
-		else
-			rc=$?
-			cd "${oldpwd}" ||:
-			# race with directory removal: no partial bundle
-			rm -f "${bundle_tmp}" ||:
-			return $rc
-		fi
-	done
-
 	# atomically replace bundle with new: cleanup on error
-	mv -f "${bundle_tmp}" "${bundle}" && chmod -f go+r "${bundle}" || \
-		rc=$? && rm -f "${bundle_tmp}" ||:
+	if [ -s "${bundle_tmp}" ] &&
+	   chmod -f go+r "${bundle_tmp}" &&
+	   mv -f "${bundle_tmp}" "${bundle}"
+	then
+		:
+	else
+		rc=$?
+		rm -f "${bundle_tmp}" ||:
+	fi
 
 	cd "${oldpwd}" ||:
 
