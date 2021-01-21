@@ -110,7 +110,7 @@ else
 			-in "$PARENT_KEY_DIR/last-key" \
 			-out "$KEY_DIR/ca.key"
 
-		r="^\s*\(export\s\+CA_PASSPHRASE\)=['\"]\?\(.*\)[\"']\?\(\s*\)\(#.*\)\?\$"
+		r="^\s*\(export\s\+CA_PASSPHRASE\)=['\"]\?\([^\"']*\)[\"']\?\(\s*\)\(#.*\)\?\$"
 		ca_passphrase="$(sed -n -e "s|$r|\2|p" "$VARS_FILE")"
 		if [ "$ca_passphrase" != "$CA_PASSPHRASE" ]; then
 			if grep -q "$r" "$VARS_FILE"; then
