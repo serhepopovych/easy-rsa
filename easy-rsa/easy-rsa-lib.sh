@@ -149,22 +149,27 @@ pwmake()
 
 ################################################################################
 
-this_prog='easy-rsa-lib.sh'
+# Usage: _this ...
+_this()
+{
+	[ -z "${this-}" ] || return 0
 
-if [ ! -e "$0" -o "$0" -ef "/proc/$$/exe" ]; then
-    # Executed script is
-    #  a) read from stdin through pipe
-    #  b) specified via -c option
-    #  d) sourced
-    this="$this_prog"
-    this_dir='./'
-else
-    # Executed script exists and it's inode differs
-    # from process exe symlink (Linux specific)
-    this="$0"
-    this_dir="${this%/*}/"
-fi
-this_dir="$(cd "$this_dir" && echo "$PWD")"
+	if [ ! -e "$0" -o "$0" -ef "/proc/$$/exe" ]; then
+		# Executed script is
+		#  a) read from stdin through pipe
+		#  b) specified via -c option
+		#  d) sourced
+		printf >&2 -- '%s: not executed, exiting.\n' "$0"
+		return 123
+	else
+		# Executed script exists and it's inode differs
+		# from process exe symlink (Linux specific)
+		this="$0"
+		this_dir="${this%/*}/"
+	fi
+	this_dir="$(cd "$this_dir" && echo "$PWD")" || return
+}
+_this "$@" || exit
 
 # Set program name unless already set
 [ -n "${prog_name-}" ] || prog_name="${this##*/}"
@@ -177,17 +182,18 @@ umask $(printf -- '%04o\n' $(($(umask) | 0022))) ||:
 
 # Check for environment variables file correctness
 [ -n "${KEY_DIR-}" ] ||
-    abort "$this_prog: no KEY_DIR variable defined.
+    abort "easy-rsa-lib.sh: no KEY_DIR variable defined.
 
 Make sure you are running via \"exec-ca <ca> ...\"
 with <ca> pointing to valid \"vars-<ca>\" file.
 "
+[ -n "${KEY_DIR##dummy}" ] || return 0
 
 # Check for initialized CA or build-ca (build-inter symlink to build-ca)
 [ "$this" -ef "$EASY_RSA/build-ca"  -o \
   "$this" -ef "$EASY_RSA/clean-all" -o \
   ! -d "$KEY_DIR" -o -s "$KEY_DIR/serial" ] ||
-    abort "$this_prog: no \"$KEY_DIR/serial\": CA is not initialized
+    abort "easy-rsa-lib.sh: no \"$KEY_DIR/serial\": CA is not initialized
 
 Make sure you initialized it with build-ca or build-inter
 commands before use and thus \"$KEY_DIR/serial\" is not empty.

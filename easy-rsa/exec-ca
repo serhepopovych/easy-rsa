@@ -6,6 +6,7 @@
 [ -z "${KEY_DIR-}" ] || IN_EXEC_CA=''
 
 if [ -z "${IN_EXEC_CA-}" ]; then
+	# Usage: usage
 	usage()
 	{
 		local rc=$?
@@ -79,20 +80,33 @@ EOF
 	# Finish argument parsing
 	trap - EXIT
 
-	# Try to determine EASY_RSA
-	if [ -z "${EASY_RSA-}" ]; then
-		EASY_RSA="$(readlink -qf "$0" 2>/dev/null)" || EASY_RSA="$0"
-		EASY_RSA="${EASY_RSA%/*}"
-		if [ ! -f "$EASY_RSA/easy-rsa-lib.sh" ]; then
-			printf >&2 -- '%s: cannot find easy-rsa location\n' "$0"
-			exit 1
-		fi
-	fi
+	# Usage: _this ...
+	_this()
+	{
+		[ -z "${this-}" ] || return 0
 
-	# Change to EASY_RSA
-	if [ ! -d "$EASY_RSA" ]; then
-		printf >&2 -- '%s: EASY_RSA ("%s") is not a directory\n' \
-			"$0" "$EASY_RSA"
+		if [ ! -e "$0" -o "$0" -ef "/proc/$$/exe" ]; then
+			# Executed script is
+			#  a) read from stdin through pipe
+			#  b) specified via -c option
+			#  d) sourced
+			printf >&2 -- '%s: not executed, exiting.\n' "$0"
+			return 123
+		else
+			# Executed script exists and it's inode differs
+			# from process exe symlink (Linux specific)
+			this="$0"
+			this_dir="${this%/*}/"
+		fi
+		this_dir="$(cd "$this_dir" && echo "$PWD")" || return
+	}
+	_this "$@" || exit
+
+	# Try to determine EASY_RSA
+	if [ -z "${EASY_RSA-}" ] && EASY_RSA="$this_dir" &&
+	   [ ! -f "$EASY_RSA/easy-rsa-lib.sh" ]
+	then
+		printf >&2 -- '%s: cannot find easy-rsa location\n' "$this"
 		exit 1
 	fi
 
