@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Requires: cat(1), mv(1), rm(1), chmod(1), awk(1), tr(1), head(1)
+# Requires: cat(1), mv(1), rm(1), chmod(1), awk(1)
 
 [ -z "${__easy_rsa_lib_sh__-}" ] || return 0
 __easy_rsa_lib_sh__=1
@@ -11,6 +11,7 @@ __easy_rsa_lib_sh__=1
 . "$EASY_RSA/lib/libfile.sh"
 . "$EASY_RSA/lib/libopenssl.sh"
 . "$EASY_RSA/lib/libutil.sh"
+. "$EASY_RSA/lib/libpwquality.sh"
 
 # Usage: make_bundle <dir> <file> <bundle> [<force>]
 make_bundle()
@@ -137,14 +138,6 @@ for_each_user_ca()
 		return $rc
 	}
 	for_each_passwd '-1' '-1' 'do_exec_ca' "$@"
-}
-
-# Usage: pwmake [<length>]
-pwmake()
-{
-	tr -dc '[:graph:]' </dev/urandom | \
-	tr -d '[\"'\''\\&|]' | head -c "${1:-64}"
-	echo
 }
 
 ################################################################################

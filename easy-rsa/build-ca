@@ -46,7 +46,7 @@ elif [ -z "$PARENT_KEY_DIR" ]; then
 	# Set KEY_PASSPHRASE to random one to make sure intermediate CA
 	# private key encrypted with known key. Later we will change to
 	# CA_PASSPHRASE of intermediate CA
-	KEY_PASSPHRASE="$(pwmake 16)"
+	KEY_PASSPHRASE="$(pw_make 16)"
 
 	# Make an intermediate CA certificate/private key pair
 	# using a locally generated root certificate
@@ -102,7 +102,7 @@ else
 		# Change private key passphrase to set intermediate CA
 		# CA_PASSPHRASE or generate new one as initially we encrypted
 		# with temporary passphrase that should not be reused
-		[ -n "$CA_PASSPHRASE" ] || CA_PASSPHRASE="$(pwmake 16)"
+		pw_valid "${CA_PASSPHRASE-}" || CA_PASSPHRASE="$(pw_make 16)"
 
 		"$OPENSSL" pkey \
 			-passin 'env:KEY_PASSPHRASE' \

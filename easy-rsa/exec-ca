@@ -136,7 +136,10 @@ else
 		exit 1
 	fi
 
-	if [ -n "$CA_PASSPHRASE" ]; then
+	# Source functions library
+	KEY_DIR='dummy' . "$EASY_RSA/easy-rsa-lib.sh"
+
+	if pw_valid "${CA_PASSPHRASE-}"; then
 		if m="$(stat -c '0%a' "$VARS_FILE")" && [ "$m" -ne 0600 ]; then
 			cat >&2 <<EOF
 $0: vars ("$VARS_FILE") file specifies CA private key passphrase and must
