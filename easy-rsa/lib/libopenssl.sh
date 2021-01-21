@@ -269,7 +269,12 @@ ossl_x509_get_var()
 
 	local var
 
-	var="$(ossl_x509 "$crt" "$@" -noout)" || return
+	var="$(
+	    ossl_x509 "$crt" "$@" \
+	        -noout \
+	        -nameopt oneline,-space_eq,sep_comma_plus,use_quote \
+	        #
+	)" || return
 
 	echo "$var" |
 	sed -n -e "s/^\(${var_regex}\)\s*=\s*\(.\+\)\s*\$/${var_name}='\\$n'/p"
@@ -283,7 +288,16 @@ ossl_get_field4dn_by_name()
 	local dn="${1:?missing 1st arg to ${func}() <dn>}"
 	local fn="${2:?missing 2d arg to ${func}() <fn>}"
 
-	echo "$dn" | sed -n -e "s/^.*\/\($fn\+\)=\([^/]\+\).*\$/'\2'/p"
+	local t=",$dn,"
+
+	t="${t##*,$fn=}" && [ "$t" != "$dn" ] || return
+	if [ -n "${t##\"*}" ]; then
+		t="${t%%,*}"
+	else
+		t="${t#\"}" && t="${t%%\",*}"
+	fi
+
+	[ -n "$t" ] && echo "$t" || return
 }
 
 # Usage: ossl_date2ts [<ossl_date>]
@@ -576,7 +590,15 @@ ossl_index_txt_same_pubkey_flist()
 		local pem="$(ossl_index_txt_filename "$7" "$8")"
 
 		if ! (V=0 valid_file "$pem"); then
-			pem="$(ossl_get_field4dn_by_name "$9" 'CN').crt"
+			pem="$(
+			    IFS='/'
+			    for t in $9; do
+			        if [ "${t%%=*}" = 'CN' ]; then
+			            echo "${t#CN=}"
+			            break
+			        fi
+			    done
+			).crt"
 			if ! (V=0 valid_file "$pem"); then
 				return 0
 			fi
@@ -667,8 +689,7 @@ ossl_index_txt_revoke_certs()
 		# issued certificates with the same CN will never reuse
 		# possibly compromised private key and we have a copy.
 
-		CN="$(ossl_get_field4dn_by_name "$subject" 'CN')"
-		if [ -n "$CN" ]; then
+		if CN="$(ossl_get_field4dn_by_name "$subject" 'CN')"; then
 			mv -f "$CN.crt" "$CN.crt.$serial.revoked" ||:
 			mv -f "$CN.csr" "$CN.csr.$serial.revoked" ||:
 			mv -f "$CN.key" "$CN.key.$serial.revoked" ||:
