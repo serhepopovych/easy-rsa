@@ -52,21 +52,20 @@ if [ -z "${IN_EXEC_CA-}" ]; then
 	exit
 fi
 
+# Source functions library
+. "$EASY_RSA/easy-rsa-lib.sh"
+
 # Per user configuration
 export VARS_DIR=${VARS_DIR:-~/easy-rsa}
 export VARS_FILE="$VARS_DIR/vars-$IN_EXEC_CA"
 
 if ! . "$VARS_FILE"; then
-	printf >&2 -- '%s: source vars ("%s") file failed\n' \
-		    "$0" "$VARS_FILE"
-	exit 1
+	fatal '%s: sourcing vars file ("%s") failed\n' \
+		"$prog_name" "$VARS_FILE"
 fi
 
 # Change working directory to KEY_DIR
 cd "$KEY_DIR" ||:
-
-# Source functions library
-. "$EASY_RSA/easy-rsa-lib.sh"
 
 if [ -z "$update_childs" ]; then
 	if [ "$prog_name" = 'revoke-full' ]; then

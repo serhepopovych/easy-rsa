@@ -126,29 +126,43 @@ EOF
 		${env_vars} \
 		-- '"$0"' '"$@"'
 else
+	# Source functions library
+	KEY_DIR='dummy' . "$EASY_RSA/easy-rsa-lib.sh"
+
 	# Per user configuration
 	export VARS_DIR=${VARS_DIR:-~/easy-rsa}
 	export VARS_FILE="$VARS_DIR/vars-$IN_EXEC_CA"
 
 	if ! . "$VARS_FILE"; then
-		printf >&2 -- '%s: source vars ("%s") file failed\n' \
-		    "$0" "$VARS_FILE"
-		exit 1
+		fatal '%s: sourcing vars file ("%s") failed\n' \
+		      "$prog_name" "$VARS_FILE"
 	fi
 
-	# Source functions library
-	KEY_DIR='dummy' . "$EASY_RSA/easy-rsa-lib.sh"
+	# Usage: vars_file_access_ok
+	vars_file_access_ok()
+	{
+		pw_valid "${CA_PASSPHRASE-}" || return 0
 
-	if pw_valid "${CA_PASSPHRASE-}"; then
-		if m="$(stat -c '0%a' "$VARS_FILE")" && [ "$m" -ne 0600 ]; then
-			cat >&2 <<EOF
-$0: vars ("$VARS_FILE") file specifies CA private key passphrase and must
-have 0600 permissions to be readable only by owner (and root)!'
-EOF
-			exit 1
+		local fmt='%s: vars file ("%s") has CA passphrase and is %s\n'
+		local t
+
+		# mode
+		if t="$(file_rights_octal "$VARS_FILE")" &&
+		   [ $((t & 077)) -ne 0 ]
+		then
+			fatal "$fmt" "$prog_name" "$VARS_FILE" \
+				'group/world accessible'
 		fi
-		unset m
-	fi
+
+		# owner/group
+		if t="$(file_owner_octal "$VARS_FILE")" &&
+		   [ "$t" != "$(id -u):$(id -g)" ]
+		then
+			fatal "$fmt" "$prog_name" "$VARS_FILE" \
+				'not (group) owned by the current user'
+		fi
+	}
+	vars_file_access_ok
 
 	# Command to run with CA environment or $SHELL if no command is given
 	if [ $# -eq 0 ]; then

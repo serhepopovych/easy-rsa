@@ -52,8 +52,9 @@ error_exit()
 # Usage: fatal <fmt> ...
 fatal()
 {
+	local rc=$?
 	error "$@"
-	exit
+	exit $rc
 }
 
 # Usage: env_call [NAME=VAL...] [options] [--] <command> [<args>...]
@@ -169,7 +170,7 @@ _exit()
 	local _rc=$?
 	trap - EXIT
 	local rc="${1:-${_rc}}"
-	[ "$rc" -ge 0 -o "$rc" -lt 0 ] 2>/dev/null || rc=${_rc}
+	[ "$rc" -ge 0 ] 2>/dev/null || rc=${_rc}
 	exit $rc
 }
 
