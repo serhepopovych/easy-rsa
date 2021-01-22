@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Requires: cat(1), mv(1), rm(1), chmod(1), awk(1)
+# Requires: cat(1), sed(1), grep(1), mv(1), rm(1), chmod(1), awk(1)
 
 [ -z "${__easy_rsa_lib_sh__-}" ] || return 0
 __easy_rsa_lib_sh__=1
@@ -138,6 +138,42 @@ for_each_user_ca()
 		return $rc
 	}
 	for_each_passwd '-1' '-1' 'do_exec_ca' "$@"
+}
+
+# Usage: try_passphrase <var_name> <vars_file>
+try_passphrase()
+{
+	local func="${FUNCNAME:-try_passphrase}"
+
+	local var_name="${1:?missing 2st arg to ${func}() <var_name>}"
+	local vars_file="${2:?missing 1st arg to ${func}() <vars_file>}"
+
+	eval "
+		  if pw_old=\"\${$var_name-}\" &&
+		     pw_valid \"\$pw_old\"
+		then
+			return
+		elif pp_new=\"\$(pw_make 16)\" &&
+		     $var_name=\"\$pp_new\"
+		then
+			:
+		else
+			return
+		fi
+	"
+
+	local r='\(\s*\)\(#.*\)\?$'
+	r="^\s*\(export\s\+$var_name\)=['\"]\?\([^\"']*\)[\"']\?$r"
+
+	if grep -s -q "$r" "$vars_file"; then
+		sed -i "$vars_file" \
+		    -e "s|$r|\1='$pp_new'\3\4|" || return
+	else
+		echo >>"$vars_file" \
+		   "export $var_name='$pw_new'" || return
+	fi
+
+	chmod -f go= "$vars_file" || return
 }
 
 ################################################################################

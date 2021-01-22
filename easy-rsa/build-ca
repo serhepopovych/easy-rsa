@@ -24,10 +24,16 @@ Type YES (uppercase) if you really want to recreate THIS CA: ' \
 "$KEY_DIR/index.txt"
 		read answer
 		[ "$answer" = 'YES' ] || abort 'Not YES: canceling.\n'
+
+		# Make sure to create new passphrase
+		CA_PASSPHRASE=''
 	fi
 
 	# Cleanup CA and all it's subCAs
 	"$EASY_RSA/clean-all" || exit
+
+	# Optionally create new passphrase
+	try_passphrase 'CA_PASSPHRASE' "$VARS_FILE"
 
 	# Build a root certificate and empty certificate revocation list.
 	"$EASY_RSA/pkitool" --interact --initca "$@"
@@ -101,27 +107,16 @@ else
 
 		# Change private key passphrase to set intermediate CA
 		# CA_PASSPHRASE or generate new one as initially we encrypted
-		# with temporary passphrase that should not be reused
-		pw_valid "${CA_PASSPHRASE-}" || CA_PASSPHRASE="$(pw_make 16)"
+		# with temporary passphrase that should not be reused.
+		#
+		# Replace CA_PASSPHRASE in vars-<ca> file if needed.
+		try_passphrase 'CA_PASSPHRASE' "$VARS_FILE"
 
 		"$OPENSSL" pkey \
 			-passin 'env:KEY_PASSPHRASE' \
 			-passout 'env:CA_PASSPHRASE' \
 			-in "$PARENT_KEY_DIR/last-key" \
 			-out "$KEY_DIR/ca.key"
-
-		r="^\s*\(export\s\+CA_PASSPHRASE\)=['\"]\?\([^\"']*\)[\"']\?\(\s*\)\(#.*\)\?\$"
-		ca_passphrase="$(sed -n -e "s|$r|\2|p" "$VARS_FILE")"
-		if [ "$ca_passphrase" != "$CA_PASSPHRASE" ]; then
-			if grep -q "$r" "$VARS_FILE"; then
-				sed -i "$VARS_FILE" \
-				    -e "s|$r|\1='$CA_PASSPHRASE'\3\4|"
-			else
-				echo "export CA_PASSPHRASE='$CA_PASSPHRASE'" \
-					>>"$VARS_FILE"
-			fi
-		fi
-		unset r ca_passphrase
 
 		# Make sure KEY_PASSPHRASE is empty to avoid possible reuse
 		KEY_PASSPHRASE=''

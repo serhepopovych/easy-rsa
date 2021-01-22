@@ -61,7 +61,7 @@ export KEY_SIZE=2048
 #
 # Note that this file should not be world/group readable and
 # corresponding warning is given if CA_PASSPHRASE is set.
-export CA_PASSPHRASE='@ca_passphrase@'
+export CA_PASSPHRASE='passphrase'
 
 # In how many days should the root CA key expire?
 export CA_EXPIRE=${CA_EXPIRE:-3650}
