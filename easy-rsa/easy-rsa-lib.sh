@@ -154,7 +154,7 @@ try_passphrase()
 		then
 			return
 		elif pp_new=\"\$(pw_make 16)\" &&
-		     $var_name=\"\$pp_new\"
+		     export $var_name=\"\$pp_new\"
 		then
 			:
 		else
