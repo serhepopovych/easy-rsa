@@ -59,34 +59,81 @@ preconfigured easy-rsa/ in it's home directory at creation time because
 no easy-rsa/ installed in /etc/skel, you must manually copy skeleton
 from <install_dir>/easy-rsa/skel/* to user home directory:
 
-  # Add user
-  $ sudo useradd -c 'PKI certificate management user' -m certmgr
+  # Usage: setup4user <user>...
+  setup4user()
+  {
+      # Requires: sudo(8), chown(1), chmod(1), cp(1), stat(1), id(1)
+      # Variables: $easy_rsa_dir (default: /opt/easy-rsa)
 
-  # Copy skeleton
-  $ sudo -u certmgr -i cp -a /opt/easy-rsa/skel/easy-rsa ~certmgr
+      local func="${FUNCNAME:-setup4user}"
 
-  # Adjust ownership and permissions (for both certmgr and lighttpd user)
-  $ sudo -u certmgr -i chown -R certmgr:certmgr ~certmgr/easy-rsa
-  $ u='www-data' && id "$u" >/dev/null 2>&1 || \
-    u='lighttpd' && id "$u" >/dev/null 2>&1 || \
-    u=''
-  $ [ -z "$u" ] || sudo -u root -i chown :$u ~certmgr/easy-rsa
-  $ sudo -u root -i chmod 0710 ~certmgr/easy-rsa
+      local u="${1:?missing 1st arg to ${func}() <user>}"
 
-  $ if [ -n "$u" ]; then                             \
-      t="$(stat -c '%a' ~certmgr)" &&                \
-      while [ ${#t} -gt 2 ]; do t="${t#[0-9]}"; done \
-                                                     \
-      if [ $((t & 001)) -ne 0 ]; then                \
-        :                                            \
-      elif [ $((t & 010)) -ne 0 ]; then              \
-        [ "$(stat -c '%G')" = "$u" ] ||              \
-          sudo -u certmgr -i chmod o+x ~certmgr      \
-      else                                           \
-        sudo -u certmgr -i chown :$u ~certmgr        \
-        sudo -u certmgr -i chmod g+x ~certmgr        \
-      fi                                             \
-    fi
+      if [ $# -ne 1 ]; then
+          local rc=0
+          for u in "$@"; do
+              if [ -n "${1-}" ]; then
+                  "$func" "$1" || : $((rc += $?))
+              fi
+          done
+          return $rc
+      fi
+
+      local easy_rsa_dir="${easy_rsa_dir:-/opt/easy-rsa}"
+
+      # Add user
+      sudo -i /bin/sh -c "
+          useradd -c 'PKI certificate management user' -m '$u'
+      " || return
+
+      # Home directory
+      eval "local homedir=~$u"
+      local easy_rsa_homedir="$homedir/easy-rsa"
+
+      # Copy skeleton and adjust file ownership
+      sudo -i /bin/sh -c "
+          cp -a '$easy_rsa_dir/skel/easy-rsa' '$easy_rsa_homedir' &&
+          chown -R '$u:$u' '$easy_rsa_homedir'
+      " || return
+
+      # Find lighttpd user and group
+      for u in \
+          'www-data' \
+          'lighttpd' \
+          '' \
+          #
+      do
+          [ -n "$u" ] || return
+          u="$(id -u "$u" 2>/dev/null)" && break ||:
+      done
+      local g
+      g="$(id -g "$u")" || g="$u"
+
+      # Make sure lighttpd has access to content
+      sudo -i /bin/sh -c "
+          chown  ':$g' '$easy_rsa_homedir' &&
+          chmod '0710' '$easy_rsa_homedir'
+      " || return
+
+      local t
+      t="$(stat -c '%a' "$homedir")" || return
+      while [ ${#t} -gt 2 ]; do
+          t="${t#[0-9]}"
+      done && t=$((t))
+
+        if [ $((t & 001)) -ne 0 ]; then
+          :
+      elif [ $((t & 010)) -ne 0 ]; then
+          [ "$(stat -c '%g' "$homedir")" = "$g" ] ||
+              sudo -i chmod o+x "$homedir"
+      else
+          sudo -i /bin/sh -c "
+              chown ':$g' '$homedir' &&
+              chmod 'g+x' '$homedir'
+          " || return
+      fi
+  }
+  setup4user 'certmgr'
 
 Now to make user specific easy-rsa installation visible to lighttpd put
 symlink to user home directory
