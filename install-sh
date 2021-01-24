@@ -96,8 +96,8 @@ setup4user()
 	if [ $# -ne 1 ]; then
 		local rc=0
 		for u in "$@"; do
-			if [ -n "${1-}" ]; then
-				"$func" "$1" || : $((rc += $?))
+			if [ -n "$u" ]; then
+				"$func" "$u" || : $((rc += $?))
 			fi
 		done
 		return $rc
