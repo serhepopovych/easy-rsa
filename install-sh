@@ -1,6 +1,6 @@
 #!/bin/sh -e
 
-# Requires: rm(1), ln(1), id(1)
+# Requires: rm(1), ln(1), id(1), mv(1)
 
 ## Workaround for issue https://github.com/serhepopovych/easy-rsa/issues/1
 
@@ -14,7 +14,12 @@ for u in \
 	"$ROOT/etc/letsencrypt/live/@fqdn@" \
 	#
 do
-	mv "$u" "$(echo "$u" | eval sed $SUBST_TEMPLATES)" ||:
+	t="$(echo "$u" | eval sed $SUBST_TEMPLATES)"
+	if [ -e "$t" ]; then
+		rm -rf "$u" ||:
+	else
+		mv  -f "$u" "$t" ||:
+	fi
 done
 
 ## Make xbin symlink
