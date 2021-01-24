@@ -66,29 +66,20 @@ elif [ -z "${PARENT_KEY_DIR-}" -o -z "${FN-}" ]; then
 	) && [ -n "${FN-}" ] || exit
 	exec 4>&-
 
-	# New csr/pkey generated: KEY_PHASPHRASE was used save it
-	if [ $DO_REQ -eq 1 ]; then
-		# Store it in PARENT Key Passphrase File temorary file to avoid
-		# passing as exec-ca parameter making it visible to others
-		PARENT_KPF="$(mktemp -t 'build-inter.pkpf.XXXXXXXX')" || exit
-
-		# Make sure it is removed if exec fails
-		trap 'rm -f "$PARENT_KPF"' EXIT
-
-		# Not making it compatible for sourcing (e.g. with "."
-		# or "source" builtin) to avoid possible code inject
-		echo "$KEY_PASSPHRASE" >"$PARENT_KPF"
-	fi
-
-	# Re-exec itself with exec-ca to switch to subCA config
-	exec "$EASY_RSA/exec-ca" \
-	     "EASY_RSA=$EASY_RSA" \
-	     "PARENT_KEY_DIR=$KEY_DIR" \
-	     "PARENT_KPF=$PARENT_KPF" \
-	     "FN=$FN" \
-		-- "$FN" "$0" "$@"
-
-	# Never reached
+	{
+		# New csr/pkey generated: write KEY_PHASPHRASE to stdout
+		if [ $DO_REQ -eq 1 ]; then
+			echo "$KEY_PASSPHRASE"
+		fi
+	} | {
+		# Re-exec itself with exec-ca to switch to subCA config
+		exec "$EASY_RSA/exec-ca" \
+		     "EASY_RSA=$EASY_RSA" \
+		     "PARENT_KEY_DIR=$KEY_DIR" \
+		     "FN=$FN" \
+			-- "$FN" "$0" "$@"
+	}
+	# Return last command in pipeline status
 	exit
 elif [ -s "$PARENT_KEY_DIR/$FN.crt" ]; then
 	if ! cmp -s "$PARENT_KEY_DIR/$FN.key" "$KEY_DIR/ca.key"; then
@@ -96,12 +87,8 @@ elif [ -s "$PARENT_KEY_DIR/$FN.crt" ]; then
 		# recreated and there is little reason to ask user before
 		# cleanup: do silently
 
-		# Read single line PARENT Key Passphrase File and remove it
-		KEY_PASSPHRASE="$(
-			read -r line <"$PARENT_KPF"
-			rm -f "$PARENT_KPF"
-			echo "$line"
-		)"
+		# Read single line from stdin
+		KEY_PASSPHRASE="$(read -r line && echo "$line")" || exit
 
 		# Mark as exportable
 		export KEY_PASSPHRASE
