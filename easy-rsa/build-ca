@@ -1,8 +1,8 @@
 #!/bin/sh -e
 
-# Requires: ln(1), rm(1), grep(1), sed(1), mktemp(1), cat(1)
+# Requires: ln(1), rm(1), cmp(1), mktemp(1)
 
-if [ -z "$IN_EXEC_CA" ]; then
+if [ -z "${IN_EXEC_CA-}" ]; then
 	printf >&2 -- '%s: run with "exec-ca" prepared environment\n' "$0"
 	exit 1
 fi
@@ -11,7 +11,7 @@ fi
 . "$EASY_RSA/easy-rsa-lib.sh"
 
 # See how we where called
-if [ "$prog_name" = 'build-ca' ]; then
+  if [ "$prog_name" = 'build-ca' ]; then
 	if [ -s "$KEY_DIR/index.txt" ]; then
 		printf  >&2 -- '
 WARNING: "%s" exists and not empty.
@@ -37,7 +37,7 @@ Type YES (uppercase) if you really want to recreate THIS CA: ' \
 
 	# Build a root certificate and empty certificate revocation list.
 	"$EASY_RSA/pkitool" --interact --initca "$@"
-elif [ -z "$PARENT_KEY_DIR" ]; then
+elif [ -z "${PARENT_KEY_DIR-}" ]; then
 	# build-inter
 	if [ "$prog_name" != 'build-inter' ]; then
 		printf >&2 -- 'WARNING: called as "%s", assume "build-inter"\n' \
@@ -62,7 +62,7 @@ elif [ -z "$PARENT_KEY_DIR" ]; then
 	exec 4>&1
 	eval $(
 	    "$EASY_RSA/pkitool" 3>&1 >&4 \
-	        --sign --interact --inter --pass "$@" | cat
+	        --sign --interact --inter --pass "$@"
 	) && [ -s "$KEY_DIR/$FN.crt" ] || exit
 	exec 4>&-
 
@@ -90,9 +90,7 @@ elif [ -z "$PARENT_KEY_DIR" ]; then
 
 	# Never reached
 	exit
-elif [ -z "$IN_EXEC_CA" ]; then
-	! : || abort -- '%s: invalid usage model\n' "$prog_name"
-else
+elif [ -s "$PARENT_KEY_DIR/last-crt" ]; then
 	if ! cmp -s "$PARENT_KEY_DIR/last-key" "$KEY_DIR/ca.key"; then
 		# If we here then probably intermediate CA certificate/key
 		# recreated and there is little reason to ask user before
@@ -141,6 +139,8 @@ else
 	# Link parent to child
 	relative_path "$KEY_DIR" "$PARENT_KEY_DIR/child-${KEY_DIR##*/}" target
 	ln -sf "$target" "$PARENT_KEY_DIR/child-${KEY_DIR##*/}"
+else
+	abort -- '%s: invalid usage model\n' "$prog_name"
 fi
 
 # Generate CRL
