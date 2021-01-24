@@ -5,23 +5,23 @@
 ## Workaround for issue https://github.com/serhepopovych/easy-rsa/issues/1
 
 for u in \
-    "$ROOT/etc/lighttpd/vhosts.d/@fqdn@" \
-    "$ROOT/etc/lighttpd/pki/@domain@" \
-    "$ROOT/etc/logrotate.d/lighttpd-@fqdn@" \
-    "$ROOT/var/log/lighttpd/@fqdn@" \
-    \
-    "$ROOT/etc/letsencrypt/live/@domain@" \
-    "$ROOT/etc/letsencrypt/live/@fqdn@" \
-    #
+	"$ROOT/etc/lighttpd/vhosts.d/@fqdn@" \
+	"$ROOT/etc/lighttpd/pki/@domain@" \
+	"$ROOT/etc/logrotate.d/lighttpd-@fqdn@" \
+	"$ROOT/var/log/lighttpd/@fqdn@" \
+	\
+	"$ROOT/etc/letsencrypt/live/@domain@" \
+	"$ROOT/etc/letsencrypt/live/@fqdn@" \
+	#
 do
-    mv "$u" "$(echo "$u" | eval sed $SUBST_TEMPLATES)" ||:
+	mv "$u" "$(echo "$u" | eval sed $SUBST_TEMPLATES)" ||:
 done
 
 ## Make xbin symlink
 
 t="$TARGET/easy-rsa/extensions/xbin"
 if [ -L "$t" ]; then
-    rm -f "$t" ||:
+	rm -f "$t" ||:
 fi
 ln -sf . "$t"
 
@@ -30,27 +30,27 @@ ln -sf . "$t"
 # Usage: lighttpd_runas
 lighttpd_runas()
 {
-   local u g
+	local u g
 
-    # Find lighttpd user and group
-    for u in \
-        'www-data' \
-        'lighttpd' \
-        "$(id -u)" \
-        '' \
-        #
-    do
-        [ -n "$u" ] || return
-        u="$(id -u "$u" 2>/dev/null)" && break ||:
-    done
-    g="$(id -g "$u")" || g="$u"
+	# Find lighttpd user and group
+	for u in \
+		'www-data' \
+		'lighttpd' \
+		"$(id -u)" \
+		'' \
+		#
+	do
+		[ -n "$u" ] || return
+		u="$(id -u "$u" 2>/dev/null)" && break ||:
+	done
+	g="$(id -g "$u")" || g="$u"
 
-    echo "lighttpd_user='$u'"
-    echo "lighttpd_group='$g'"
+	echo "lighttpd_user='$u'"
+	echo "lighttpd_group='$g'"
 }
 if ! eval "$(lighttpd_runas)"; then
-    lighttpd_user=''
-    lighttpd_group=''
+	lighttpd_user=''
+	lighttpd_group=''
 fi
 
 ## Adjust filesystem ownership and permissions
@@ -58,22 +58,22 @@ fi
 t="$ROOT/etc/logrotate.d/lighttpd-$fqdn"
 [ ! -f "$t" ] || adj_rights '' 0644 "$t"
 
-t="$ROOT/etc/cron.d/update-crl.crontab"       && adj_rights '' 0644 "$t"
+t="$ROOT/etc/cron.d/update-crl.crontab"	   && adj_rights '' 0644 "$t"
 t="$ROOT/etc/cron.d/update-index-txt.crontab" && adj_rights '' 0644 "$t"
 
 for t in "$TARGET/easy-rsa/skel/easy-rsa"/vars-*; do
-    adj_rights '' 0600 "$t"
-    adj_rights '' 0700 "${t%/vars-*}/${t##*/vars-}"
+	adj_rights '' 0600 "$t"
+	adj_rights '' 0700 "${t%/vars-*}/${t##*/vars-}"
 done
 
 if [ -n "$lighttpd_user" ]; then
-    # $TARGET/easy-rsa/skel/easy-rsa
-    adj_rights ":$lighttpd_group" 0710 "$t"
+	# $TARGET/easy-rsa/skel/easy-rsa
+	adj_rights ":$lighttpd_group" 0710 "$t"
 
-    t="$ROOT/var/log/lighttpd/$fqdn"
-    [ ! -d "$t" ] || adj_rights "$lighttpd_user:$lighttpd_group" 0750 "$t"
-    t="$t/access.log"
-    [ ! -f "$t" ] || adj_rights "$lighttpd_user:$lighttpd_group" 0640 "$t"
+	t="$ROOT/var/log/lighttpd/$fqdn"
+	[ ! -d "$t" ] || adj_rights "$lighttpd_user:$lighttpd_group" 0750 "$t"
+	t="$t/access.log"
+	[ ! -f "$t" ] || adj_rights "$lighttpd_user:$lighttpd_group" 0640 "$t"
 fi
 
 ## Setup easy-rsa skeleton for users
@@ -81,78 +81,78 @@ fi
 # Usage: setup4user <user>...
 setup4user()
 {
-    # Requires: sudo(8), chown(1), chmod(1), cp(1), stat(1), ln(1)
-    # Variables: $easy_rsa_dir (default: /opt/easy-rsa)
+	# Requires: sudo(8), chown(1), chmod(1), cp(1), stat(1), ln(1)
+	# Variables: $easy_rsa_dir (default: /opt/easy-rsa)
 
-    local func="${FUNCNAME:-setup4user}"
+	local func="${FUNCNAME:-setup4user}"
 
-    local u="${1:?missing 1st arg to ${func}() <user>}"
+	local u="${1:?missing 1st arg to ${func}() <user>}"
 
-    if [ $# -ne 1 ]; then
-        local rc=0
-        for u in "$@"; do
-            if [ -n "${1-}" ]; then
-                "$func" "$1" || : $((rc += $?))
-            fi
-        done
-        return $rc
-    fi
+	if [ $# -ne 1 ]; then
+		local rc=0
+		for u in "$@"; do
+			if [ -n "${1-}" ]; then
+				"$func" "$1" || : $((rc += $?))
+			fi
+		done
+		return $rc
+	fi
 
-    local easy_rsa_dir="${easy_rsa_dir:-/opt/easy-rsa}"
+	local easy_rsa_dir="${easy_rsa_dir:-/opt/easy-rsa}"
 
-    # Add user
-    sudo -i /bin/sh -c "
-        if eval \"[ ~$u = '~$u' ]\"; then
-            useradd -c 'PKI certificate management user' -m '$u'
-        fi
-    " || return
+	# Add user
+	sudo -i /bin/sh -c "
+		if eval \"[ ~$u = '~$u' ]\"; then
+			useradd -c 'PKI certificate management user' -m '$u'
+		fi
+	" || return
 
-    # Home directory
-    eval "local homedir=~$u"
-    local easy_rsa_homedir="$homedir/easy-rsa"
+	# Home directory
+	eval "local homedir=~$u"
+	local easy_rsa_homedir="$homedir/easy-rsa"
 
-    # Copy skeleton and adjust file ownership
-    sudo -i /bin/sh -c "
-        if ! [ -d '$easy_rsa_homedir' ]; then
-            cp -a '$easy_rsa_dir/skel/easy-rsa' '$easy_rsa_homedir'
-        fi &&
-        chown -R '$u:$u' '$easy_rsa_homedir'
-    " || return
+	# Copy skeleton and adjust file ownership
+	sudo -i /bin/sh -c "
+		if ! [ -d '$easy_rsa_homedir' ]; then
+			cp -a '$easy_rsa_dir/skel/easy-rsa' '$easy_rsa_homedir'
+		fi &&
+		chown -R '$u:$u' '$easy_rsa_homedir'
+	" || return
 
-    # Make sure lighttpd has access to content
-    sudo -i /bin/sh -c "
-        if [ -n "$lighttpd_group" ]; then
-            chown  ':$lighttpd_group' '$easy_rsa_homedir'
-        fi &&
-        chmod '0710' '$easy_rsa_homedir'
-    " || return
+	# Make sure lighttpd has access to content
+	sudo -i /bin/sh -c "
+		if [ -n "$lighttpd_group" ]; then
+			chown  ':$lighttpd_group' '$easy_rsa_homedir'
+		fi &&
+		chmod '0710' '$easy_rsa_homedir'
+	" || return
 
-    local t
-    t="$(stat -c '%a' "$homedir")" || return
-    while [ ${#t} -gt 2 ]; do
-        t="${t#[0-9]}"
-    done && t=$((t))
+	local t
+	t="$(stat -c '%a' "$homedir")" || return
+	while [ ${#t} -gt 2 ]; do
+		t="${t#[0-9]}"
+	done && t=$((t))
 
-      if [ $((t & 001)) -ne 0 ]; then
-        :
-    elif [ $((t & 010)) -ne 0 ]; then
-        [ "$(stat -c '%g' "$homedir")" = "$lighttpd_group" ] ||
-            sudo -i chmod o+x "$homedir"
-    else
-        sudo -i /bin/sh -c "
-            if [ -n "$lighttpd_group" ]; then
-                chown ':$lighttpd_group' '$homedir'
-            fi &&
-            chmod 'g+x' '$homedir'
-        " || return
-    fi
+	  if [ $((t & 001)) -ne 0 ]; then
+		:
+	elif [ $((t & 010)) -ne 0 ]; then
+		[ "$(stat -c '%g' "$homedir")" = "$lighttpd_group" ] ||
+			sudo -i chmod o+x "$homedir"
+	else
+		sudo -i /bin/sh -c "
+			if [ -n "$lighttpd_group" ]; then
+				chown ':$lighttpd_group' '$homedir'
+			fi &&
+			chmod 'g+x' '$homedir'
+		" || return
+	fi
 
-    # Make user specific easy-rsa installation visible to lighttpd
-    # by putting symlink to $easy_rsa_homedir/.htconf
-    sudo -i /bin/sh -c "
-        ln -snf '$easy_rsa_homedir/.htconf'
-                '/etc/lighttpd/vhosts.d/$fqdn/users.d/$u'
-    " || return
+	# Make user specific easy-rsa installation visible to lighttpd
+	# by putting symlink to $easy_rsa_homedir/.htconf
+	sudo -i /bin/sh -c "
+		ln -snf '$easy_rsa_homedir/.htconf'
+			'/etc/lighttpd/vhosts.d/$fqdn/users.d/$u'
+	" || return
 }
 ${users:+setup4user $users}
 
