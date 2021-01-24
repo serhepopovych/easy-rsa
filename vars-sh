@@ -25,4 +25,3 @@ SUBST_TEMPLATES="$SUBST_TEMPLATES"'
 -e "s|@fqdn@|$fqdn|g"
 -e "s|@fqdn_regex@|$fqdn_regex|g"
 '
-
