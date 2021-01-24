@@ -108,7 +108,7 @@ setup4user()
 	# Add user
 	sudo -i /bin/sh -c "
 		if eval \"[ ~$u = '~$u' ]\"; then
-			useradd -c 'PKI certificate management user' -m '$u'
+			useradd -c 'PKI certificate management user' -m '$u';
 		fi
 	" || return
 
@@ -119,7 +119,7 @@ setup4user()
 	# Copy skeleton and adjust file ownership
 	sudo -i /bin/sh -c "
 		if ! [ -d '$easy_rsa_homedir' ]; then
-			cp -a '$easy_rsa_dir/skel/easy-rsa' '$easy_rsa_homedir'
+			cp -a '$easy_rsa_dir/skel/easy-rsa' '$easy_rsa_homedir';
 		fi &&
 		chown -R '$u:$u' '$easy_rsa_homedir'
 	" || return
@@ -127,7 +127,7 @@ setup4user()
 	# Make sure lighttpd has access to content
 	sudo -i /bin/sh -c "
 		if [ -n "$lighttpd_group" ]; then
-			chown  ':$lighttpd_group' '$easy_rsa_homedir'
+			chown  ':$lighttpd_group' '$easy_rsa_homedir';
 		fi &&
 		chmod '0710' '$easy_rsa_homedir'
 	" || return
@@ -146,7 +146,7 @@ setup4user()
 	else
 		sudo -i /bin/sh -c "
 			if [ -n "$lighttpd_group" ]; then
-				chown ':$lighttpd_group' '$homedir'
+				chown ':$lighttpd_group' '$homedir';
 			fi &&
 			chmod 'g+x' '$homedir'
 		" || return
