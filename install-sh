@@ -72,9 +72,6 @@ for t in "$TARGET/easy-rsa/skel/easy-rsa"/vars-*; do
 done
 
 if [ -n "$lighttpd_user" ]; then
-	# $TARGET/easy-rsa/skel/easy-rsa
-	adj_rights ":$lighttpd_group" 0710 "$t"
-
 	t="$ROOT/var/log/lighttpd/$fqdn"
 	[ ! -d "$t" ] || adj_rights "$lighttpd_user:$lighttpd_group" 0750 "$t"
 	t="$t/access.log"
