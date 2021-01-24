@@ -52,7 +52,10 @@ elif [ -z "$PARENT_KEY_DIR" ]; then
 	# Set KEY_PASSPHRASE to random one to make sure intermediate CA
 	# private key encrypted with known key. Later we will change to
 	# CA_PASSPHRASE of intermediate CA
-	KEY_PASSPHRASE="$(pw_make 16)"
+	KEY_PASSPHRASE="$(pw_make 16)" || exit
+
+	# Mark as exportable
+	export KEY_EXPIRE KEY_PASSPHRASE
 
 	# Make an intermediate CA certificate/private key pair
 	# using a locally generated root certificate
@@ -101,6 +104,9 @@ else
 			rm -f "$PARENT_KPF"
 			echo "$line"
 		)"
+
+		# Mark as exportable
+		export KEY_PASSPHRASE
 
 		# Cleanup CA and all it's subCAs
 		"$EASY_RSA/clean-all" || exit
