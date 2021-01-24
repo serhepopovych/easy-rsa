@@ -2,6 +2,21 @@
 
 # Requires: rm(1), ln(1), id(1)
 
+## Workaround for issue https://github.com/serhepopovych/easy-rsa/issues/1
+
+for u in \
+    "$ROOT/etc/lighttpd/vhosts.d/@fqdn@" \
+    "$ROOT/etc/lighttpd/pki/@domain@" \
+    "$ROOT/etc/logrotate.d/lighttpd-@fqdn@" \
+    "$ROOT/var/log/lighttpd/@fqdn@" \
+    \
+    "$ROOT/etc/letsencrypt/live/@domain@" \
+    "$ROOT/etc/letsencrypt/live/@fqdn@" \
+    #
+do
+    mv "$u" "$(echo "$u" | eval sed $SUBST_TEMPLATES)" ||:
+done
+
 ## Make xbin symlink
 
 t="$TARGET/easy-rsa/extensions/xbin"
