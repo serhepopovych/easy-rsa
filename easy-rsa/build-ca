@@ -117,6 +117,7 @@ elif [ -s "$PARENT_KEY_DIR/last-crt" ]; then
 		try_passphrase 'CA_PASSPHRASE' "$VARS_FILE"
 
 		"$OPENSSL" pkey \
+			-aes256 \
 			-passin 'env:KEY_PASSPHRASE' \
 			-passout 'env:CA_PASSPHRASE' \
 			-in "$PARENT_KEY_DIR/last-key" \
