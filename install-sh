@@ -102,7 +102,9 @@ setup4user()
 
     # Add user
     sudo -i /bin/sh -c "
-        useradd -c 'PKI certificate management user' -m '$u'
+        if eval \"[ ~$u = '~$u' ]\"; then
+            useradd -c 'PKI certificate management user' -m '$u'
+        fi
     " || return
 
     # Home directory
@@ -111,7 +113,9 @@ setup4user()
 
     # Copy skeleton and adjust file ownership
     sudo -i /bin/sh -c "
-        cp -a '$easy_rsa_dir/skel/easy-rsa' '$easy_rsa_homedir' &&
+        if ! [ -d '$easy_rsa_homedir' ]; then
+            cp -a '$easy_rsa_dir/skel/easy-rsa' '$easy_rsa_homedir'
+        fi &&
         chown -R '$u:$u' '$easy_rsa_homedir'
     " || return
 
