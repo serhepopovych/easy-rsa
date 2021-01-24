@@ -221,9 +221,9 @@ with <ca> pointing to valid \"vars-<ca>\" file.
 # Check for initialized CA or build-ca (build-inter symlink to build-ca)
 [ "$this" -ef "$EASY_RSA/build-ca"  ] ||
 [ "$this" -ef "$EASY_RSA/clean-all" ] ||
-[ -s "$KEY_DIR/index.txt" ] ||
-    abort "easy-rsa-lib.sh: no \"$KEY_DIR/index.txt\": CA is not initialized
+[ -s "$KEY_DIR/ca.crt" ] ||
+    abort "easy-rsa-lib.sh: no \"$KEY_DIR/ca.crt\": CA is not initialized
 
 Make sure you initialized it with build-ca or build-inter
-commands before use and thus \"$KEY_DIR/index.txt\" is not empty.
+commands before use and thus \"$KEY_DIR/ca.crt\" is not empty.
 "
