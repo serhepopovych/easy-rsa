@@ -476,7 +476,7 @@ ossl_index_txt_line2args()
 	filename="$5"
 
 	# DN
-	dn="$6"
+	dn="$(IFS='/' && set -- ${6#/} && IFS=',' && echo "$*")"
 
 	line="\
 		'$line' \
@@ -590,15 +590,7 @@ ossl_index_txt_same_pubkey_flist()
 		local pem="$(ossl_index_txt_filename "$7" "$8")"
 
 		if ! (V=0 valid_file "$pem"); then
-			pem="$(
-			    IFS='/'
-			    for t in $9; do
-			        if [ "${t%%=*}" = 'CN' ]; then
-			            echo "${t#CN=}"
-			            break
-			        fi
-			    done
-			).crt"
+			pem="$(ossl_get_field4dn_by_name "$9" 'CN').crt"
 			if ! (V=0 valid_file "$pem"); then
 				return 0
 			fi
