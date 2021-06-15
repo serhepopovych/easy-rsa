@@ -126,17 +126,17 @@ for_each_passwd()
 	local n=0
 
 	# uid_min
-	[ -n "${1+x}" ] && uid_min="$1" && n=$((n + 1)) &&
-		[ "$uid_min" -lt 0 -a "$uid_min" -ge 0 ] 2>/dev/null ||
+	[ -n "${1+x}" ] && n=$((n + 1)) && uid_min="$1" &&
+		[ "$uid_min" -lt 0 -o "$uid_min" -ge 0 ] 2>/dev/null ||
 	uid_min="$(uid_min_login_defs)"
 
 	# uid_max
-	[ -n "${2+x}" ] && uid_max="$2" && n=$((n + 1)) &&
-		[ "$uid_max" -lt 0 -a "$uid_max" -ge 0 ] 2>/dev/null ||
+	[ -n "${2+x}" ] && n=$((n + 1)) && uid_max="$2" &&
+		[ "$uid_max" -lt 0 -o "$uid_max" -ge 0 ] 2>/dev/null ||
 	uid_max="$(uid_max_login_defs)"
 
 	# action
-	[ -n "${3+x}" ] &&  action="$3" && n=$((n + 1)) &&
+	[ -n "${3+x}" ] && n=$((n + 1)) && action="$3" &&
 		[ -n "$action" ] ||
 	{ action='echo'; set --; n=0; }
 
