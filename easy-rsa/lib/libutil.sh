@@ -142,11 +142,10 @@ for_each_passwd()
 
 	shift $n
 
-	local uid=$uid_min
 	if [ $uid_min -gt $uid_max ]; then
+		local t=$uid_min
 		uid_min=$uid_max
-		uid_max=$uid
-		uid=$uid_min
+		uid_max=$t
 	fi
 
 	[ $uid_min -ge 0 ] || uid_max=2147483647 # 0x7fffffff
