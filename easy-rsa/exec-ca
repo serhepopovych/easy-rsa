@@ -127,7 +127,7 @@ EOF
 		-- '"$0"' '"$@"'
 else
 	# Source functions library
-	KEY_DIR='dummy' . "$EASY_RSA/easy-rsa-lib.sh"
+	. "$EASY_RSA/lib/librtti.sh"
 
 	# Per user configuration
 	export VARS_DIR=${VARS_DIR:-~/easy-rsa}
@@ -137,6 +137,9 @@ else
 		fatal '%s: sourcing vars file ("%s") failed\n' \
 		      "$prog_name" "$VARS_FILE"
 	fi
+
+	# Source functions library
+	. "$EASY_RSA/easy-rsa-lib.sh"
 
 	# Usage: vars_file_access_ok
 	vars_file_access_ok()

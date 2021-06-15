@@ -53,7 +53,7 @@ if [ -z "${IN_EXEC_CA-}" ]; then
 fi
 
 # Source functions library
-. "$EASY_RSA/easy-rsa-lib.sh"
+. "$EASY_RSA/lib/librtti.sh"
 
 # Per user configuration
 export VARS_DIR=${VARS_DIR:-~/easy-rsa}
@@ -63,6 +63,9 @@ if ! . "$VARS_FILE"; then
 	fatal '%s: sourcing vars file ("%s") failed\n' \
 		"$prog_name" "$VARS_FILE"
 fi
+
+# Source functions library
+. "$EASY_RSA/easy-rsa-lib.sh"
 
 # Change working directory to KEY_DIR
 cd "$KEY_DIR" ||:
