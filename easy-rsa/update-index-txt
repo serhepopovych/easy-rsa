@@ -100,11 +100,11 @@ cb()
 
 	local serial="$7"
 	# <serial>.pem if 'unknown' or specific name from index.txt
-	local pem="$(ossl_index_txt_filename "$serial" "$8")"
+	local "pem='$(ossl_index_txt_filename "$serial" "$8")'"
 
 	# Common Name from Distinguished Name
 	local cn
-	eval "cn=$(ossl_get_field4dn_by_name "$9" 'CN')"
+	eval "cn='$(ossl_get_field4dn_by_name "$9" 'CN')'"
 
 	if [ -n "$cn" ]; then
 		local crt="$cn.crt"
