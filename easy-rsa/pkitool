@@ -548,7 +548,7 @@ if [ -d "$KEY_DIR" -a -n "$KEY_CONFIG" ]; then
             ${REQ_NODES:--passout env:KEY_PASSPHRASE} \
             -new -newkey rsa:$KEY_SIZE -keyout "$FN.key" \
             -out "$FN.crt" \
-            -config "$KEY_CONFIG" && \
+            -config "$KEY_CONFIG" &&
         chmod 0600 "$FN.key" || exit
     else
         # Make sure CA key/cert is available
@@ -593,7 +593,7 @@ if [ -d "$KEY_DIR" -a -n "$KEY_CONFIG" ]; then
                     -new -newkey rsa:$KEY_SIZE -keyout "$FN/privkey.pem" \
                     -out "$FN/cert.csr" \
                     -config "$KEY_CONFIG" \
-                    $PKCS11_ARGS && \
+                    $PKCS11_ARGS &&
                 chmod 0600 "$FN/privkey.pem" || exit
 
                 DO_REQ=1
@@ -613,7 +613,7 @@ if [ -d "$KEY_DIR" -a -n "$KEY_CONFIG" ]; then
                 $OPENSSL ca $BATCH $CA_EXT -days $days -notext \
                     ${CA_PASSPHRASE:+-passin env:CA_PASSPHRASE} \
                     -out "$FN/cert.pem" -in "$FN/cert.csr" \
-                    -config "$KEY_CONFIG" && \
+                    -config "$KEY_CONFIG" &&
                 [ -s "$FN/cert.pem" ] || exit
 
                 DO_CRT=1
@@ -624,13 +624,14 @@ if [ -d "$KEY_DIR" -a -n "$KEY_CONFIG" ]; then
         if [ $DO_P12 -gt 0 ]; then
             $OPENSSL pkcs12 -export -certfile "$CA.crt" \
                 ${P12_NODES:--passout env:KEY_PASSPHRASE} -out "$FN/$FN.p12" \
-                -inkey "$FN/privkey.pem" -in "$FN/cert.pem" && \
+                -inkey "$FN/privkey.pem" -in "$FN/cert.pem" \
+                -keypbe 'aes-256-cbc' -certpbe 'aes-256-cbc' -macalg 'sha256' &&
             chmod 0600 "$FN/$FN.p12" || exit
         elif [ $DO_P11 -gt 0 ]; then
             # Load certificate into PKCS#11 token
             $OPENSSL x509 \
                 -in "$FN/cert.pem" -inform PEM \
-                -out "$FN/cert.der" -outform DER && \
+                -out "$FN/cert.der" -outform DER &&
             $PKCS11TOOL --module "$PKCS11_MODULE_PATH" \
                 --write-object "$FN/cert.der" --type cert \
                 --login --pin "$PKCS11_PIN" \
