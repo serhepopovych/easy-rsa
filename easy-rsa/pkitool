@@ -553,7 +553,7 @@ if [ -d "$KEY_DIR" -a -n "$KEY_CONFIG" ]; then
     else
         # Make sure CA key/cert is available
         if [ $DO_CRT -eq 1 -o $DO_P12 -eq 1 ]; then
-            if [ ! -s "$KEY_DIR/$CA.crt" -o ! -s "$KEY_DIR/$CA.key" ]; then
+            if ! [ -s "$CA.crt" -a -s "$CA.key" ]; then
                 echo "$PROGNAME: Need a readable $CA.crt and $CA.key in $KEY_DIR"
                 echo "Try $PROGNAME --initca to build a root certificate/key."
                 exit 1
@@ -605,7 +605,7 @@ if [ -d "$KEY_DIR" -a -n "$KEY_CONFIG" ]; then
             if [ $DO_CRT -gt 1 -a -s "$FN/cert.pem" ]; then
                 DO_CRT=0
             else
-                days="$(ossl_cert_read_date2ts "$KEY_DIR/$CA.crt" -end)" &&
+                days="$(ossl_cert_read_date2ts "$CA.crt" -end)" &&
                 days="$(ossl_cert_expires_in_days "$days")" || exit
 
                 [ $days -le $KEY_EXPIRE ] || days=$KEY_EXPIRE
