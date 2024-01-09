@@ -202,7 +202,7 @@ DO_ROOT='0'
 DO_REQ=''
 REQ_EXT=''
 REQ_NODES='-nodes'
-DO_CA=''
+DO_CRT=''
 CA_EXT=''
 CA='ca'
 DO_P12=''
@@ -221,7 +221,7 @@ while [ $# -gt 0 ]; do
             if [ $DO_ROOT -eq 0 ]; then
                 DO_ROOT='1'
                 DO_REQ="${DO_REQ:-0}"
-                DO_CA="${DO_CA:-0}"
+                DO_CRT="${DO_CRT:-0}"
                 DO_P12="${DO_P12:-0}"
                 DO_P11="${DO_P11:-0}"
             fi
@@ -244,11 +244,11 @@ while [ $# -gt 0 ]; do
 
         --csr)
             DO_REQ='1'
-            DO_CA='0'
+            DO_CRT='0'
             ;;
         --sign)
             DO_REQ='2'
-            DO_CA='1'
+            DO_CRT='1'
             ;;
 
         --keysize)
@@ -278,12 +278,12 @@ while [ $# -gt 0 ]; do
 
         --pkcs12)
             DO_REQ='2'
-            DO_CA='2'
+            DO_CRT='2'
             DO_P12='1'
             ;;
         --pkcs11)
             DO_REQ='2'
-            DO_CA='2'
+            DO_CRT='2'
             DO_P11='1'
             PKCS11_MODULE_PATH="$2"
             PKCS11_SLOT="$3"
@@ -362,12 +362,12 @@ if [ -n "$BATCH" ]; then
 fi
 
 if [ $DO_ROOT -eq 1 ]; then
-    if [ $DO_REQ -gt 0 -o $DO_CA -gt 0 -o $DO_P12 -gt 0 -o $DO_P11 -gt 0 ]; then
+    if [ $DO_REQ -gt 0 -o $DO_CRT -gt 0 -o $DO_P12 -gt 0 -o $DO_P11 -gt 0 ]; then
         die '--initca and --csr and/or --sign and/or --pkcs11 and/or --pkcs12 cannot be specified together'
     fi
 else
     DO_REQ="${DO_REQ:-1}"
-    DO_CA="${DO_CA:-1}"
+    DO_CRT="${DO_CRT:-1}"
     DO_P12="${DO_P12:-0}"
     DO_P11="${DO_P11:-0}"
 fi
@@ -452,7 +452,7 @@ if [ $DO_ROOT -eq 1 ]; then
     FN="$CA"
     DO_REQ='0'
     REQ_EXT=''
-    DO_CA='0'
+    DO_CRT='0'
     CA_EXT=''
     DO_P12='0'
     DO_P11='0'
@@ -507,7 +507,7 @@ if [ $DEBUG -eq 1 ]; then
     echo "DO_REQ='$DO_REQ'"
     echo "REQ_EXT='$REQ_EXT'"
     echo "REQ_NODES='$REQ_NODES'"
-    echo "DO_CA='$DO_CA'"
+    echo "DO_CRT='$DO_CRT'"
     echo "CA_EXT='$CA_EXT'"
     echo "CA='$CA'"
     echo "DO_P12='$DO_P12'"
@@ -549,7 +549,7 @@ if [ -d "$KEY_DIR" -a -n "$KEY_CONFIG" ]; then
         chmod 0600 "$FN.key" || exit
     else
         # Make sure CA key/cert is available
-        if [ $DO_CA -eq 1 -o $DO_P12 -eq 1 ]; then
+        if [ $DO_CRT -eq 1 -o $DO_P12 -eq 1 ]; then
             if [ ! -s "$KEY_DIR/$CA.crt" -o ! -s "$KEY_DIR/$CA.key" ]; then
                 echo "$PROGNAME: Need a readable $CA.crt and $CA.key in $KEY_DIR"
                 echo "Try $PROGNAME --initca to build a root certificate/key."
@@ -576,7 +576,7 @@ if [ -d "$KEY_DIR" -a -n "$KEY_CONFIG" ]; then
             PKCS11_ARGS="-engine pkcs11 -keyform engine -key $PKCS11_SLOT:$PKCS11_ID"
         fi
 
-        # Build cert/csr/pkey, make pkcs12 bund or load into pkcs11 token
+        # Build csr and pkey
         if [ $DO_REQ -gt 0 ]; then
             if [ $DO_REQ -gt 1 -a -s "$FN.csr" ]; then
                 DO_REQ=0
@@ -591,10 +591,12 @@ if [ -d "$KEY_DIR" -a -n "$KEY_CONFIG" ]; then
 
                 DO_REQ=1
             fi
-        fi && \
-        if [ $DO_CA -gt 0 ]; then
-            if [ $DO_CA -gt 1 -a -s "$FN.crt" ]; then
-                DO_CA=0
+        fi
+
+        # Build crt
+        if [ $DO_CRT -gt 0 ]; then
+            if [ $DO_CRT -gt 1 -a -s "$FN.crt" ]; then
+                DO_CRT=0
             else
                 days="$(ossl_cert_read_date2ts "$KEY_DIR/$CA.crt" -end)" &&
                 days="$(ossl_cert_expires_in_days "$days")" || exit
@@ -607,31 +609,26 @@ if [ -d "$KEY_DIR" -a -n "$KEY_CONFIG" ]; then
                     -config "$KEY_CONFIG" && \
                 [ -s "$FN.crt" ] || exit
 
-                DO_CA=1
+                DO_CRT=1
             fi
-        fi && \
-        if [ -n 'x' ]; then
-            if [ $DO_P12 -gt 0 ]; then
-                $OPENSSL pkcs12 $P12_NODES -export -inkey "$FN.key" \
-                    -out "$FN.p12" -in "$FN.crt" -certfile "$CA.crt"  && \
-                chmod 0600 "$FN.p12" || exit
-            else
-                ! :
-            fi || \
-            if [ $DO_P11 -gt 0 ]; then
-                # Load certificate into PKCS#11 token
-                $OPENSSL x509 \
-                    -in "$FN.crt" -inform PEM \
-                    -out "$FN.crt.der" -outform DER && \
-                $PKCS11TOOL --module "$PKCS11_MODULE_PATH" \
-                    --write-object "$FN.crt.der" --type cert \
-                    --login --pin "$PKCS11_PIN" \
-                    --slot "$PKCS11_SLOT" --id "$PKCS11_ID" \
-                    --label "$PKCS11_LABEL" || exit
-                rm -f "$FN.crt.der"
-            else
-                ! :
-            fi ||:
+        fi
+
+        # Make pkcs12 bundle
+        if [ $DO_P12 -gt 0 ]; then
+            $OPENSSL pkcs12 $P12_NODES -export -inkey "$FN.key" \
+                -out "$FN.p12" -in "$FN.crt" -certfile "$CA.crt"  && \
+            chmod 0600 "$FN.p12" || exit
+        elif [ $DO_P11 -gt 0 ]; then
+            # Load certificate into PKCS#11 token
+            $OPENSSL x509 \
+                -in "$FN.crt" -inform PEM \
+                -out "$FN.crt.der" -outform DER && \
+            $PKCS11TOOL --module "$PKCS11_MODULE_PATH" \
+                --write-object "$FN.crt.der" --type cert \
+                --login --pin "$PKCS11_PIN" \
+                --slot "$PKCS11_SLOT" --id "$PKCS11_ID" \
+                --label "$PKCS11_LABEL" || exit
+            rm -f "$FN.crt.der"
         fi
     fi
 
@@ -660,7 +657,7 @@ if [ -d "$KEY_DIR" -a -n "$KEY_CONFIG" ]; then
             FN='$FN'
             DO_ROOT='$DO_ROOT'
             DO_REQ='$DO_REQ'
-            DO_CA='$DO_CA'
+            DO_CRT='$DO_CRT'
             DO_P12='$DO_P12'
             DO_P11='$DO_P11'
         "
