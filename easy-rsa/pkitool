@@ -568,7 +568,7 @@ if [ -d "$KEY_DIR" -a -n "$KEY_CONFIG" ]; then
 
             echo 'Generating key pair on PKCS#11 token...'
             $PKCS11TOOL --module "$PKCS11_MODULE_PATH" \
-                --keypairgen --key-type rsa:1024 \
+                --keypairgen --key-type rsa:$KEY_SIZE \
                 --login --pin "$PKCS11_PIN" \
                 --slot "$PKCS11_SLOT" --id "$PKCS11_ID" \
                 --label "$PKCS11_LABEL" || exit
