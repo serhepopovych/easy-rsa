@@ -196,6 +196,17 @@ usage()
     echo "  ./$PROGNAME client-new"
 }
 
+# Make sure ./vars was sourced beforehand
+[ -n "$KEY_DIR" -a -n "$KEY_CONFIG" ] || need_vars || exit
+
+# Make sure $KEY_CONFIG points to the correct version of openssl.cnf
+if ! grep -i 'easy-rsa version 2\.[0-9]' "$KEY_CONFIG" >/dev/null 2>&1; then
+    echo "$PROGNAME: KEY_CONFIG (set by the ./vars script) is pointing to the wrong"
+    echo "version of openssl.cnf: $KEY_CONFIG."
+    echo 'The correct version should have a comment that says: easy-rsa version 2.x'
+    exit 1
+fi
+
 # Set tool defaults
 [ -n "$OPENSSL" ] || export OPENSSL='openssl'
 [ -n "$PKCS11TOOL" ] || export PKCS11TOOL='pkcs11-tool'
@@ -387,6 +398,11 @@ if [ $DO_P11 -eq 1 ]; then
     fi
 fi
 
+# Use KEY_DIR
+if ! cd "$KEY_DIR"; then
+    die "Cannot change directory to $KEY_DIR"
+fi
+
 # Set KEY_CN, FN
 if [ $# -gt 1 ]; then
     usage
@@ -530,148 +546,132 @@ if [ $DEBUG -eq 1 ]; then
     echo "KEY_PASSPHRASE='$KEY_PASSPHRASE'"
 fi
 
-# Make sure ./vars was sourced beforehand
-if [ -d "$KEY_DIR" -a -n "$KEY_CONFIG" ]; then
-    cd "$KEY_DIR"
-
-    # Make sure $KEY_CONFIG points to the correct version of openssl.cnf
-    if ! grep -i 'easy-rsa version 2\.[0-9]' "$KEY_CONFIG" >/dev/null 2>&1; then
-        echo "$PROGNAME: KEY_CONFIG (set by the ./vars script) is pointing to the wrong"
-        echo "version of openssl.cnf: $KEY_CONFIG"
-        echo 'The correct version should have a comment that says: easy-rsa version 2.x'
-        exit 1
-    fi
-
-    # Build root CA
-    if [ $DO_ROOT -eq 1 ]; then
-        $OPENSSL req $BATCH -days $CA_EXPIRE -x509 \
-            ${REQ_NODES:--passout env:KEY_PASSPHRASE} \
-            -new -newkey rsa:$KEY_SIZE -keyout "$FN.key" \
-            -out "$FN.crt" \
-            -config "$KEY_CONFIG" &&
-        chmod 0600 "$FN.key" || exit
-    else
-        # Make sure CA key/cert is available
-        if [ $DO_CRT -eq 1 -o $DO_P12 -eq 1 ]; then
-            if ! [ -s "$CA.crt" -a -s "$CA.key" ]; then
-                echo "$PROGNAME: Need a readable $CA.crt and $CA.key in $KEY_DIR"
-                echo "Try $PROGNAME --initca to build a root certificate/key."
-                exit 1
-            fi
-        fi
-
-        # Will store files in subdirectory
-        install -d "$FN/" || exit
-
-        # Generate key for PKCS#11 token
-        if [ $DO_P11 -eq 1 ]; then
-            stty -echo
-            echo -n 'User PIN: '
-            read -r PKCS11_PIN
-            stty echo
-            export PKCS11_PIN
-
-            echo 'Generating key pair on PKCS#11 token...'
-            $PKCS11TOOL --module "$PKCS11_MODULE_PATH" \
-                --keypairgen --key-type rsa:$KEY_SIZE \
-                --login --pin "$PKCS11_PIN" \
-                --slot "$PKCS11_SLOT" --id "$PKCS11_ID" \
-                --label "$PKCS11_LABEL" || exit
-
-            PKCS11_ARGS="-engine pkcs11 -keyform engine -key $PKCS11_SLOT:$PKCS11_ID"
-        else
-            PKCS11_ARGS=''
-        fi
-
-        # Build csr and pkey
-        if [ $DO_REQ -gt 0 ]; then
-            if [ $DO_REQ -gt 1 -a -s "$FN/cert.csr" ]; then
-                DO_REQ=0
-            else
-                $OPENSSL req $BATCH $REQ_EXT \
-                    ${REQ_NODES:--passout env:KEY_PASSPHRASE} \
-                    -new -newkey rsa:$KEY_SIZE -keyout "$FN/privkey.pem" \
-                    -out "$FN/cert.csr" \
-                    -config "$KEY_CONFIG" \
-                    $PKCS11_ARGS &&
-                chmod 0600 "$FN/privkey.pem" || exit
-
-                DO_REQ=1
-            fi
-        fi
-
-        # Build crt
-        if [ $DO_CRT -gt 0 ]; then
-            if [ $DO_CRT -gt 1 -a -s "$FN/cert.pem" ]; then
-                DO_CRT=0
-            else
-                days="$(ossl_cert_read_date2ts "$CA.crt" -end)" &&
-                days="$(ossl_cert_expires_in_days "$days")" || exit
-
-                [ $days -le $KEY_EXPIRE ] || days=$KEY_EXPIRE
-
-                $OPENSSL ca $BATCH $CA_EXT -days $days -notext \
-                    ${CA_PASSPHRASE:+-passin env:CA_PASSPHRASE} \
-                    -out "$FN/cert.pem" -in "$FN/cert.csr" \
-                    -config "$KEY_CONFIG" &&
-                [ -s "$FN/cert.pem" ] || exit
-
-                DO_CRT=1
-            fi
-        fi
-
-        # Make pkcs12 bundle
-        if [ $DO_P12 -gt 0 ]; then
-            $OPENSSL pkcs12 -export -certfile "$CA.crt" \
-                ${P12_NODES:--passout env:KEY_PASSPHRASE} -out "$FN/$FN.p12" \
-                -inkey "$FN/privkey.pem" -in "$FN/cert.pem" \
-                -keypbe 'aes-256-cbc' -certpbe 'aes-256-cbc' -macalg 'sha256' &&
-            chmod 0600 "$FN/$FN.p12" || exit
-        elif [ $DO_P11 -gt 0 ]; then
-            # Load certificate into PKCS#11 token
-            $OPENSSL x509 \
-                -in "$FN/cert.pem" -inform PEM \
-                -out "$FN/cert.der" -outform DER &&
-            $PKCS11TOOL --module "$PKCS11_MODULE_PATH" \
-                --write-object "$FN/cert.der" --type cert \
-                --login --pin "$PKCS11_PIN" \
-                --slot "$PKCS11_SLOT" --id "$PKCS11_ID" \
-                --label "$PKCS11_LABEL" || exit
-            rm -f "$FN/cert.der"
-        fi
-    fi
-
-    # Point to the key/csr/crt to help caller find ones we managed
-    for f in "$FN/privkey.pem" "$FN/cert.csr" "$FN/cert.pem"; do
-        if [ -f "$f" ]; then
-            ln -sf "$f" "last-${f##*.}" || exit
-        fi
-    done
-
-    if [ $DO_ROOT -eq 1 -o $DO_REQ -eq 1 ]; then
-        if [ -z "$BATCH" -a -n "$PASS_OPT_AUTO" ]; then
-            # Output password to stderr only if it is terminal device
-            fd=2 && [ -t $fd ] || PASS_OPT_AUTO='<hidden>'
-            echo >&$fd \
-                "Private key encrypted, password (w/o quotas): '$PASS_OPT_AUTO'"
-        fi
-    fi
-
-    # Report actions we performed to /dev/fd/3. This can be used for example
-    # by calling script to determine if new csr/pkey file created or
-    # existing csr is used to create (renew) certificate with behaviour
-    # activated using --sign parameter.
-    {
-        echo >&3 "
-            FN='$FN'
-            DO_ROOT='$DO_ROOT'
-            DO_REQ='$DO_REQ'
-            DO_CRT='$DO_CRT'
-            DO_P12='$DO_P12'
-            DO_P11='$DO_P11'
-        "
-    } >/dev/null 2>&1 ||:
+# Build root CA
+if [ $DO_ROOT -eq 1 ]; then
+    $OPENSSL req $BATCH -days $CA_EXPIRE -x509 \
+        ${REQ_NODES:--passout env:KEY_PASSPHRASE} \
+        -new -newkey rsa:$KEY_SIZE -keyout "$FN.key" \
+        -out "$FN.crt" \
+        -config "$KEY_CONFIG" &&
+    chmod 0600 "$FN.key" || exit
 else
-    # Need definitions
-    need_vars
+    # Make sure CA key/cert is available
+    if [ $DO_CRT -eq 1 -o $DO_P12 -eq 1 ]; then
+        if ! [ -s "$CA.crt" -a -s "$CA.key" ]; then
+            echo "$PROGNAME: Need a readable $CA.crt and $CA.key in $KEY_DIR"
+            echo "Try $PROGNAME --initca to build a root certificate/key."
+            exit 1
+        fi
+    fi
+
+    # Will store files in subdirectory
+    install -d "$FN/" || exit
+
+    # Generate key for PKCS#11 token
+    if [ $DO_P11 -eq 1 ]; then
+        stty -echo
+        echo -n 'User PIN: '
+        read -r PKCS11_PIN
+        stty echo
+        export PKCS11_PIN
+
+        echo 'Generating key pair on PKCS#11 token...'
+        $PKCS11TOOL --module "$PKCS11_MODULE_PATH" \
+            --keypairgen --key-type rsa:$KEY_SIZE \
+            --login --pin "$PKCS11_PIN" \
+            --slot "$PKCS11_SLOT" --id "$PKCS11_ID" \
+            --label "$PKCS11_LABEL" || exit
+
+        PKCS11_ARGS="-engine pkcs11 -keyform engine -key $PKCS11_SLOT:$PKCS11_ID"
+    else
+        PKCS11_ARGS=''
+    fi
+
+    # Build csr and pkey
+    if [ $DO_REQ -gt 0 ]; then
+        if [ $DO_REQ -gt 1 -a -s "$FN/cert.csr" ]; then
+            DO_REQ=0
+        else
+            $OPENSSL req $BATCH $REQ_EXT \
+                ${REQ_NODES:--passout env:KEY_PASSPHRASE} \
+                -new -newkey rsa:$KEY_SIZE -keyout "$FN/privkey.pem" \
+                -out "$FN/cert.csr" \
+                -config "$KEY_CONFIG" \
+                $PKCS11_ARGS &&
+            chmod 0600 "$FN/privkey.pem" || exit
+
+            DO_REQ=1
+        fi
+    fi
+
+    # Build crt
+    if [ $DO_CRT -gt 0 ]; then
+        if [ $DO_CRT -gt 1 -a -s "$FN/cert.pem" ]; then
+            DO_CRT=0
+        else
+            days="$(ossl_cert_read_date2ts "$CA.crt" -end)" &&
+            days="$(ossl_cert_expires_in_days "$days")" || exit
+
+            [ $days -le $KEY_EXPIRE ] || days=$KEY_EXPIRE
+
+            $OPENSSL ca $BATCH $CA_EXT -days $days -notext \
+                ${CA_PASSPHRASE:+-passin env:CA_PASSPHRASE} \
+                -out "$FN/cert.pem" -in "$FN/cert.csr" \
+                -config "$KEY_CONFIG" &&
+            [ -s "$FN/cert.pem" ] || exit
+
+            DO_CRT=1
+        fi
+    fi
+
+    # Make pkcs12 bundle
+    if [ $DO_P12 -gt 0 ]; then
+        $OPENSSL pkcs12 -export -certfile "$CA.crt" \
+            ${P12_NODES:--passout env:KEY_PASSPHRASE} -out "$FN/$FN.p12" \
+            -inkey "$FN/privkey.pem" -in "$FN/cert.pem" \
+            -keypbe 'aes-256-cbc' -certpbe 'aes-256-cbc' -macalg 'sha256' &&
+        chmod 0600 "$FN/$FN.p12" || exit
+    elif [ $DO_P11 -gt 0 ]; then
+        # Load certificate into PKCS#11 token
+        $OPENSSL x509 \
+            -in "$FN/cert.pem" -inform PEM \
+            -out "$FN/cert.der" -outform DER &&
+        $PKCS11TOOL --module "$PKCS11_MODULE_PATH" \
+            --write-object "$FN/cert.der" --type cert \
+            --login --pin "$PKCS11_PIN" \
+            --slot "$PKCS11_SLOT" --id "$PKCS11_ID" \
+            --label "$PKCS11_LABEL" || exit
+        rm -f "$FN/cert.der"
+    fi
 fi
+
+# Point to the key/csr/crt to help caller find ones we managed
+for f in "$FN/privkey.pem" "$FN/cert.csr" "$FN/cert.pem"; do
+    if [ -f "$f" ]; then
+        ln -sf "$f" "last-${f##*.}" || exit
+    fi
+done
+
+if [ $DO_ROOT -eq 1 -o $DO_REQ -eq 1 ]; then
+    if [ -z "$BATCH" -a -n "$PASS_OPT_AUTO" ]; then
+        # Output password to stderr only if it is terminal device
+        fd=2 && [ -t $fd ] || PASS_OPT_AUTO='<hidden>'
+        echo >&$fd \
+            "Private key encrypted, password (w/o quotas): '$PASS_OPT_AUTO'"
+    fi
+fi
+
+# Report actions we performed to /dev/fd/3. This can be used for example
+# by calling script to determine if new csr/pkey file created or
+# existing csr is used to create (renew) certificate with behaviour
+# activated using --sign parameter.
+{
+    echo >&3 "
+        FN='$FN'
+        DO_ROOT='$DO_ROOT'
+        DO_REQ='$DO_REQ'
+        DO_CRT='$DO_CRT'
+        DO_P12='$DO_P12'
+        DO_P11='$DO_P11'
+    "
+} >/dev/null 2>&1 ||:
