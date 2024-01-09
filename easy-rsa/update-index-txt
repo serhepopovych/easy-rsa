@@ -1,7 +1,7 @@
 #!/bin/sh -e
 
 # Requires: mv(1), rm(1), install(1), chmod(1), sed(1), tr(1), date(1), cmp(1),
-#           mktemp(1)
+#           ln(1), mktemp(1)
 
 if [ -z "${IN_EXEC_CA-}" ]; then
 	# Usage: _this ...
@@ -79,7 +79,7 @@ exit_handler()
 }
 trap 'exit_handler' EXIT
 
-install -d "$KEY_DIR_EXPIRED" ||:
+[ -d "$KEY_DIR_EXPIRED" ] || install -d "$KEY_DIR_EXPIRED"
 
 # Usage: cb <line> \                      # $1
 #	    <status> \                    # $2
@@ -95,44 +95,29 @@ cb()
 
 	if [ $expires_days -ge 0 ]; then
 		echo "$line" >>"$index_txt_tmp"
-		return
+		return 0
 	fi
 
-	local serial="$7"
 	# <serial>.pem if 'unknown' or specific name from index.txt
 	local pem
-	pem="$(ossl_index_txt_filename "$serial" "$8")" || return 0
+	pem="$(ossl_index_txt_filename "$7" "$8")" || return 0
+
+	ln -nf "$pem" "$KEY_DIR_EXPIRED" 2>/dev/null ||:
 
 	# Common Name from Distinguished Name
-	local cn
-	eval "cn='$(ossl_get_field4dn_by_name "$9" 'CN')'"
+	local CN
+	if CN="$(ossl_get_field4dn_by_name "$9" 'CN')"; then
+		local crt="$CN/cert.pem${5:+.revoked}"
 
-	if [ -n "$cn" ]; then
-		local crt="$cn.crt"
-		local kde_crt="$KEY_DIR_EXPIRED/$crt.$serial"
-
-		# <CN>.pem is same file and thus expired too: move it
+		# <CN>/cert.pem is same file and thus expired too: move it
 		if cmp -s "$crt" "$pem"; then
-			local revoked="$5"
-
-			local key="$cn.key"
-			local kde_key="$KEY_DIR_EXPIRED/$key.$serial"
-			local csr="$cn.csr"
-			local kde_csr="$KEY_DIR_EXPIRED/$csr.$serial"
-
-			if [ -n "$revoked" ]; then
-				mv -f "$key.revoked" "$kde_key" ||:
-				mv -f "$csr.revoked" "$kde_csr" ||:
-				mv -f "$crt.revoked" "$kde_crt" ||:
-			else
-				safe_copy "$key" "$kde_key" ||:
-				safe_copy "$csr" "$kde_csr" ||:
-				safe_copy "$crt" "$kde_crt" ||:
+			if mv -f "$CN" "$KEY_DIR_EXPIRED"; then
+				ln -sf "$crt" "$KEY_DIR_EXPIRED/$pem" ||:
 			fi 2>/dev/null
 		fi
 	fi
 
-	mv -f "$pem" "$KEY_DIR_EXPIRED" 2>/dev/null ||:
+	rm -f "$pem" ||:
 
 	echo "$line" >>"$index_txt_expired"
 }

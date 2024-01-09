@@ -153,14 +153,17 @@ usage()
     echo
     echo "  In order to use PKCS#11 interface you must have opensc-0.10.0 or higher."
     echo
-    echo "Generated files and corresponding OpenVPN directives:"
+    echo "Generated files:"
     echo '(Files will be placed in the $KEY_DIR directory, defined in ./vars)'
-    echo "  ca.crt     -> root certificate (--ca)"
-    echo "  ca.key     -> root key, keep secure (not directly used by OpenVPN)"
-    echo "  .crt files -> client/server certificates (--cert)"
-    echo "  .key files -> private keys, keep secure (--key)"
-    echo "  .csr files -> certificate signing request (not directly used by OpenVPN)"
-    echo "  dh1024.pem or dh2048.pem -> Diffie Hellman parameters (--dh)"
+    echo "  ca.crt      -> root certificate (--ca)"
+    echo "  ca.key      -> root key, keep secure (not directly used)"
+    echo "   {common-name|file-name}/"
+    echo "     cert.pem     -> client/server certificate (--cert)"
+    echo "     privkey.pem  -> private key, keep secure (--key)"
+    echo "     cert.csr     -> certificate signing request (not directly used)"
+    echo "     {common-name|file-name}.p12"
+    echo "                  -> PKCS#12 file with cert, privkey and ca.crt"
+    echo "  dh2048.pem  -> Diffie Hellman parameters (--dh)"
     echo
     echo "Examples:"
     echo "  $PROGNAME --initca          -> Build root certificate"
@@ -557,6 +560,9 @@ if [ -d "$KEY_DIR" -a -n "$KEY_CONFIG" ]; then
             fi
         fi
 
+        # Will store files in subdirectory
+        install -d "$FN/" || exit
+
         # Generate key for PKCS#11 token
         if [ $DO_P11 -eq 1 ]; then
             stty -echo
@@ -579,16 +585,16 @@ if [ -d "$KEY_DIR" -a -n "$KEY_CONFIG" ]; then
 
         # Build csr and pkey
         if [ $DO_REQ -gt 0 ]; then
-            if [ $DO_REQ -gt 1 -a -s "$FN.csr" ]; then
+            if [ $DO_REQ -gt 1 -a -s "$FN/cert.csr" ]; then
                 DO_REQ=0
             else
                 $OPENSSL req $BATCH $REQ_EXT \
                     ${REQ_NODES:--passout env:KEY_PASSPHRASE} \
-                    -new -newkey rsa:$KEY_SIZE -keyout "$FN.key" \
-                    -out "$FN.csr" \
+                    -new -newkey rsa:$KEY_SIZE -keyout "$FN/privkey.pem" \
+                    -out "$FN/cert.csr" \
                     -config "$KEY_CONFIG" \
                     $PKCS11_ARGS && \
-                chmod 0600 "$FN.key" || exit
+                chmod 0600 "$FN/privkey.pem" || exit
 
                 DO_REQ=1
             fi
@@ -596,7 +602,7 @@ if [ -d "$KEY_DIR" -a -n "$KEY_CONFIG" ]; then
 
         # Build crt
         if [ $DO_CRT -gt 0 ]; then
-            if [ $DO_CRT -gt 1 -a -s "$FN.crt" ]; then
+            if [ $DO_CRT -gt 1 -a -s "$FN/cert.pem" ]; then
                 DO_CRT=0
             else
                 days="$(ossl_cert_read_date2ts "$KEY_DIR/$CA.crt" -end)" &&
@@ -606,9 +612,9 @@ if [ -d "$KEY_DIR" -a -n "$KEY_CONFIG" ]; then
 
                 $OPENSSL ca $BATCH $CA_EXT -days $days -notext \
                     ${CA_PASSPHRASE:+-passin env:CA_PASSPHRASE} \
-                    -out "$FN.crt" -in "$FN.csr" \
+                    -out "$FN/cert.pem" -in "$FN/cert.csr" \
                     -config "$KEY_CONFIG" && \
-                [ -s "$FN.crt" ] || exit
+                [ -s "$FN/cert.pem" ] || exit
 
                 DO_CRT=1
             fi
@@ -616,26 +622,26 @@ if [ -d "$KEY_DIR" -a -n "$KEY_CONFIG" ]; then
 
         # Make pkcs12 bundle
         if [ $DO_P12 -gt 0 ]; then
-            $OPENSSL pkcs12 -export \
-                ${P12_NODES:--passout env:KEY_PASSPHRASE} -out "$FN.p12" \
-                -certfile "$CA.crt" -inkey "$FN.key" -in "$FN.crt" && \
-            chmod 0600 "$FN.p12" || exit
+            $OPENSSL pkcs12 -export -certfile "$CA.crt" \
+                ${P12_NODES:--passout env:KEY_PASSPHRASE} -out "$FN/$FN.p12" \
+                -inkey "$FN/privkey.pem" -in "$FN/cert.pem" && \
+            chmod 0600 "$FN/$FN.p12" || exit
         elif [ $DO_P11 -gt 0 ]; then
             # Load certificate into PKCS#11 token
             $OPENSSL x509 \
-                -in "$FN.crt" -inform PEM \
-                -out "$FN.crt.der" -outform DER && \
+                -in "$FN/cert.pem" -inform PEM \
+                -out "$FN/cert.der" -outform DER && \
             $PKCS11TOOL --module "$PKCS11_MODULE_PATH" \
-                --write-object "$FN.crt.der" --type cert \
+                --write-object "$FN/cert.der" --type cert \
                 --login --pin "$PKCS11_PIN" \
                 --slot "$PKCS11_SLOT" --id "$PKCS11_ID" \
                 --label "$PKCS11_LABEL" || exit
-            rm -f "$FN.crt.der"
+            rm -f "$FN/cert.der"
         fi
     fi
 
     # Point to the key/csr/crt to help caller find ones we managed
-    for f in "$FN.key" "$FN.csr" "$FN.crt"; do
+    for f in "$FN/privkey.pem" "$FN/cert.csr" "$FN/cert.pem"; do
         if [ -f "$f" ]; then
             ln -sf "$f" "last-${f##*.}" || exit
         fi

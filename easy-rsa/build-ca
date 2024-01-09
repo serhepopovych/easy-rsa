@@ -81,8 +81,8 @@ elif [ -z "${PARENT_KEY_DIR-}" -o -z "${FN-}" ]; then
 	}
 	# Return last command in pipeline status
 	exit
-elif [ -s "$PARENT_KEY_DIR/$FN.crt" ]; then
-	if ! cmp -s "$PARENT_KEY_DIR/$FN.key" "$KEY_DIR/ca.key"; then
+elif [ -s "$PARENT_KEY_DIR/$FN/cert.pem" ]; then
+	if ! cmp -s "$PARENT_KEY_DIR/$FN/privkey.pem" "$KEY_DIR/ca.key"; then
 		# If we here then probably intermediate CA certificate/key
 		# recreated and there is little reason to ask user before
 		# cleanup: do silently
@@ -107,19 +107,19 @@ elif [ -s "$PARENT_KEY_DIR/$FN.crt" ]; then
 			-aes256 \
 			-passin 'env:KEY_PASSPHRASE' \
 			-passout 'env:CA_PASSPHRASE' \
-			-in "$PARENT_KEY_DIR/$FN.key" \
+			-in "$PARENT_KEY_DIR/$FN/privkey.pem" \
 			-out "$KEY_DIR/ca.key"
 
 		# Make sure KEY_PASSPHRASE is empty to avoid possible reuse
 		KEY_PASSPHRASE=''
 
 		# Copy intermediate CA private key encrypted with new
-		# passphrase back to PARENT_KEY_DIR
-		make_copy "$KEY_DIR/ca.key" "$PARENT_KEY_DIR/$FN.key"
+		# passphrase back to PARENT_KEY_DIR/$FN
+		make_copy "$KEY_DIR/ca.key" "$PARENT_KEY_DIR/$FN/privkey.pem"
 	fi
 
 	# Copy intermediate CA certificate
-	make_copy "$PARENT_KEY_DIR/$FN.crt" "$KEY_DIR/ca.crt"
+	make_copy "$PARENT_KEY_DIR/$FN/cert.pem" "$KEY_DIR/ca.crt"
 
 	# Link child to parent
 	relative_path "$PARENT_KEY_DIR" "$KEY_DIR/parent" target

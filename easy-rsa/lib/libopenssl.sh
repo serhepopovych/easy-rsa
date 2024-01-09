@@ -590,12 +590,14 @@ ossl_index_txt_same_pubkey_flist()
 		local pem
 		pem="$(ossl_index_txt_filename "$7" "$8")" || return 0
 
-		if ! (V=0 valid_file "$pem"); then
-			pem="$(ossl_get_field4dn_by_name "$9" 'CN').crt"
-			if ! (V=0 valid_file "$pem"); then
+		while ! (V=0 valid_file "$pem"); do
+			if ! [ -n "${pem##*/cert.pem}" ] ||
+			   ! pem="$(ossl_get_field4dn_by_name "$9" 'CN')" ||
+			   ! pem="$pem/cert.pem"
+			then
 				return 0
 			fi
-		fi
+		done
 
 		# Skip same file given at command line
 		if [ "$pem" -ef "$crt" ] || cmp -s "$pem" "$crt"; then
@@ -619,7 +621,7 @@ ossl_index_txt_same_pubkey_flist()
 	echo "$same_pk_flist"
 }
 
-# Usage: ossl_index_txt_revoke_certs <crt_name1>...
+# Usage: ossl_index_txt_revoke_certs <crt_file1>...
 ossl_index_txt_revoke_certs()
 {
 	local index_txt index_txt_revoke subject serial revoked CN
@@ -630,7 +632,7 @@ ossl_index_txt_revoke_certs()
 	[ -n "$*" ] || return
 
 	# There is non-empty database: backup it
-	index_txt="$KEY_DIR/index.txt"
+	index_txt='index.txt'
 	[ -s "$index_txt" ] || return
 
 	index_txt_revoke="$index_txt.revoke"
@@ -683,12 +685,20 @@ ossl_index_txt_revoke_certs()
 		# possibly compromised private key and we have a copy.
 
 		if CN="$(ossl_get_field4dn_by_name "$subject" 'CN')"; then
-			mv -f "$CN.crt" "$CN.crt.$serial.revoked" ||:
-			mv -f "$CN.csr" "$CN.csr.$serial.revoked" ||:
-			mv -f "$CN.key" "$CN.key.$serial.revoked" ||:
+			for FN in \
+				'cert.pem' \
+				'cert.csr' \
+				'privkey.pem' \
+				"$CN.p12" \
+				#
+			do
+				if FN="$CN/$FN" && [ -e "$FN" ]; then
+					mv -f "$FN" "$FN.revoked" ||:
+				fi
+			done
 
 			# Store in list of revoked certificates for rollback
-			revoked_list="'$CN.$serial' $revoked_list"
+			revoked_list="'$CN' $revoked_list"
 		fi 2>/dev/null
 	done
 
@@ -698,12 +708,18 @@ ossl_index_txt_revoke_certs()
 		# Rollback certificate revocation on failure
 		eval "set -- $revoked_list"
 
-		for FN in "$@"; do
-			serial="${FN##*.}"
-			FN="${FN%.*}"
-			mv -f "$FN.key.$serial.revoked" "$FN" ||:
-			mv -f "$FN.csr.$serial.revoked" "$FN" ||:
-			mv -f "$FN.crt.$serial.revoked" "$FN" ||:
+		for CN in "$@"; do
+			for FN in \
+				'cert.pem' \
+				'cert.csr' \
+				'privkey.pem' \
+				"$CN.p12" \
+				#
+			do
+				if FN="$CN/$FN.revoked" && [ -e "$FN" ]; then
+					mv -f "$FN" "${FN%.revoked}" ||:
+				fi
+			done
 		done 2>/dev/null
 
 		mv -f "$index_txt_revoke" "$index_txt" ||:

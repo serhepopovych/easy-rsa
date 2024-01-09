@@ -95,11 +95,14 @@ done
 
 [ $# -eq 1 ] && [ -n "$1" ] || exit
 
-# Key Common Name
-KEY_CN="$1" && shift
+# File Name
+FN="$1"
+
+# Key Common Name (will be picked from $FN by pkitool)
+KEY_CN=''
 
 # Make X509 Name from Common Name
-make_shlvar_name "$KEY_CN" KEY_NAME || exit
+make_shlvar_name "$FN" KEY_NAME || exit
 
 # remote
 [ -n "${OVPN_REMOTE-}" ] || OVPN_REMOTE="$HOSTNAME" ||
@@ -165,15 +168,15 @@ ca_path="$pki/ca"
 
 # Certificate (cert)
 ct_crt="$pki/cert.pem"
-ct_file="$KEY_DIR/$KEY_CN.crt"
+ct_file="$KEY_DIR/$FN/cert.pem"
 
 # Certificate Signing Request (CSR)
-cs_csr="$pki/csr.pem"            # unused
-cs_file="$KEY_DIR/$KEY_CN.csr"
+cs_csr="$pki/cert.csr"            # unused
+cs_file="$KEY_DIR/$FN/cert.csr"
 
 # Private key (key)
 pk_key="$pki/privkey.pem"
-pk_file="$KEY_DIR/$KEY_CN.key"
+pk_file="$KEY_DIR/$FN/privkey.pem"
 
 # Build CA if not already done
 (V=0 valid_file "$ca_file") ||
@@ -211,7 +214,7 @@ YES to reuse: ' "${cs_file##*/}" "${pk_file##*/}"
 else
     reuse=''
 fi
-"$EASY_RSA/build-key" ${OPTS-} "--$OVPN_MODE" "$KEY_CN" || exit
+"$EASY_RSA/build-key" ${OPTS-} "--$OVPN_MODE" "$FN" || exit
 
 ########################## MAKE OPENVPN CONFIGURATION ##########################
 
