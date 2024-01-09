@@ -44,8 +44,8 @@ valid_file "${pk_key}" || \
 	exit
 
 # Make temporary file to output unencrypted private key (pkey)
-pk_tmp_key="${pk_tmp##*/*}"
-pk_key_tmp="$(mktemp ${pk_tmp_key:+-t} "${pk_key}.XXXXXXXX")" || \
+pk_key_tmp="${pk_key##*/*}"
+pk_key_tmp="$(mktemp ${pk_key_tmp:+-t} "${pk_key}.XXXXXXXX")" || \
 	error '%s: creating temporary file "%s" to output pkey failed\n' \
 		"${prog_name}" "${pk_key}" || \
 	exit
