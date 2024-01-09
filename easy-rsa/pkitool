@@ -558,7 +558,6 @@ if [ -d "$KEY_DIR" -a -n "$KEY_CONFIG" ]; then
         fi
 
         # Generate key for PKCS#11 token
-        PKCS11_ARGS=
         if [ $DO_P11 -eq 1 ]; then
             stty -echo
             echo -n 'User PIN: '
@@ -574,6 +573,8 @@ if [ -d "$KEY_DIR" -a -n "$KEY_CONFIG" ]; then
                 --label "$PKCS11_LABEL" || exit
 
             PKCS11_ARGS="-engine pkcs11 -keyform engine -key $PKCS11_SLOT:$PKCS11_ID"
+        else
+            PKCS11_ARGS=''
         fi
 
         # Build csr and pkey
