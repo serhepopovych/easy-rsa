@@ -206,7 +206,7 @@ DO_CRT=''
 CA_EXT=''
 CA='ca'
 DO_P12=''
-P12_NODES=''
+P12_NODES='-nodes'
 DO_P11=''
 # must be set or errors of openssl.cnf
 PKCS11_MODULE_PATH='dummy'
@@ -542,7 +542,7 @@ if [ -d "$KEY_DIR" -a -n "$KEY_CONFIG" ]; then
     # Build root CA
     if [ $DO_ROOT -eq 1 ]; then
         $OPENSSL req $BATCH -days $CA_EXPIRE -x509 \
-            ${REQ_NODES:-${KEY_PASSPHRASE:+-passout env:KEY_PASSPHRASE}} \
+            ${REQ_NODES:--passout env:KEY_PASSPHRASE} \
             -new -newkey rsa:$KEY_SIZE -keyout "$FN.key" \
             -out "$FN.crt" \
             -config "$KEY_CONFIG" && \
@@ -582,7 +582,7 @@ if [ -d "$KEY_DIR" -a -n "$KEY_CONFIG" ]; then
                 DO_REQ=0
             else
                 $OPENSSL req $BATCH $REQ_EXT \
-                    ${REQ_NODES:-${KEY_PASSPHRASE:+-passout env:KEY_PASSPHRASE}} \
+                    ${REQ_NODES:--passout env:KEY_PASSPHRASE} \
                     -new -newkey rsa:$KEY_SIZE -keyout "$FN.key" \
                     -out "$FN.csr" \
                     -config "$KEY_CONFIG" \
@@ -615,8 +615,9 @@ if [ -d "$KEY_DIR" -a -n "$KEY_CONFIG" ]; then
 
         # Make pkcs12 bundle
         if [ $DO_P12 -gt 0 ]; then
-            $OPENSSL pkcs12 $P12_NODES -export -inkey "$FN.key" \
-                -out "$FN.p12" -in "$FN.crt" -certfile "$CA.crt"  && \
+            $OPENSSL pkcs12 -export \
+                ${P12_NODES:--passout env:KEY_PASSPHRASE} -out "$FN.p12" \
+                -certfile "$CA.crt" -inkey "$FN.key" -in "$FN.crt" && \
             chmod 0600 "$FN.p12" || exit
         elif [ $DO_P11 -gt 0 ]; then
             # Load certificate into PKCS#11 token
