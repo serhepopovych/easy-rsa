@@ -1,6 +1,6 @@
 #!/bin/sh -e
 
-# Requires: mktemp(1), mv(1), openssl(1)
+# Requires: mktemp(1), mv(1), openssl(1), cat(1)
 
 # Usage: valid_file <file>
 valid_file()
@@ -31,13 +31,31 @@ error()
 
 prog_name="${0##*/}"
 
-if [ $# -ne 1 ]; then
-	printf >&2 -- 'Usage: %s <private_key_file.key>\n' "${prog_name}"
+case "$prog_name" in
+    'print-cert-bundle')
+        [ $# -ne 2 ] && crt=' <certificate_file.crt>' || crt=''
+        ;;
+    'decrypt-pkey')
+        [ $# -ne 1 ] && crt=' ' || crt=''
+        ;;
+    *)
+        error 'Running as unsupported command "%s"\n' "$prog_name"
+        exit 125
+        ;;
+esac
+
+if [ -n "$crt" ]; then
+	printf >&2 -- 'Usage: %s %s%s\n' \
+	    "${prog_name}" '<private_key_file.key>' "${crt% }" \
+	    #
 	exit 1
 fi
 
+trap '[ -z "${pk_key_tmp-}" ] || rm -f "${pk_key_tmp}" ||:' EXIT
+
 # private key
-pk_key="$1"
+pk_key="${1-}"
+
 valid_file "${pk_key}" || \
 	error '%s: no valid private key (pkey) file "%s" found\n' \
 		"${prog_name}" "${pk_key}" || \
@@ -56,10 +74,23 @@ openssl pkey -in "${pk_key}" -out "${pk_key_tmp}" || \
 		"${prog_name}" || \
 	exit
 
-# Replace original encrypted private key (pkey) file with new unencrypted one
-mv -f "${pk_key_tmp}" "${pk_key}" || \
-	error '%s: replacing "%s" with "%s" failed\n' \
-		"${prog_name}" "${pk_key}" "${pk_key_tmp}" || \
-	exit
+# certificate
+ct_crt="${2-}"
 
-:
+if [ -n "${ct_crt}" ]; then
+	valid_file "${ct_crt}" || \
+		error '%s: no valid certificate file "%s" found\n' \
+			"${prog_name}" "${ct_crt}" || \
+		exit
+
+	# Concatenate certificate and private key and print to stdout
+	cat "${ct_crt}" "${pk_key_tmp}"
+else
+	# Replace original private key (pkey) file with new unencrypted one
+	mv -f "${pk_key_tmp}" "${pk_key}" && pk_key_tmp='' || \
+		error '%s: replacing "%s" with "%s" failed\n' \
+			"${prog_name}" "${pk_key}" "${pk_key_tmp}" || \
+		exit
+fi
+
+exit 0
