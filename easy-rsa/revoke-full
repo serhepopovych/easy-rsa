@@ -71,29 +71,25 @@ fi
 cd "$KEY_DIR" ||:
 
 if [ -z "$update_childs" ]; then
-	if [ "$prog_name" = 'revoke-full' ]; then
-		if [ $# -ne 1 ]; then
-			printf >&2 -- \
-				'usage: %s {<KEY_CN>.crt|<serial>.pem}\n' \
+	case "$prog_name" in
+		'revoke-full')
+			[ $# -ne 1 ] && serial=' <serial>' || serial=''
+			;;
+		'update-crl')
+			[ $# -ne 0 ] && serial=' ' || serial=''
+			;;
+		*)
+			error 'Running as unsupported command "%s"\n' \
 				"$prog_name"
-			exit 1
-		fi
-		if ! (V=0 valid_file "$1"); then
-			printf >&2 -- \
-				'%s: "%s" is not valid certificate\n' \
-				"$prog_name" "$1"
-			exit 1
-		fi
-		update_childs=y
+			exit 125
+			;;
+	esac
+
+	if [ -n "$serial" ]; then
+		printf >&2 -- 'usage: %s%s\n' "$prog_name" "${serial% }"
+		exit 1
 	else
-		# Either revoke-full or update-crl
-		if [ "$prog_name" != 'update-crl' ]; then
-			printf >&2 -- \
-				'WARNING: called as "%s", assume "%s"\n' \
-				"$prog_name" 'update-crl'
-			prog_name='update-crl'
-		fi
-		set --
+		set -- "${1:+${1%.pem}.pem}"
 	fi
 
 	# Set defaults
@@ -101,8 +97,16 @@ if [ -z "$update_childs" ]; then
 	export KEY_OU=''
 	export KEY_NAME=''
 
-	# Revoke certificate, backup it and generate a new CRL
 	if [ -n "$1" ]; then
+		# Revoke certificate, backup it and generate a new CRL
+		if ! (V=0 valid_file "$1"); then
+			printf >&2 -- \
+				'%s: "%s" is not valid certificate\n' \
+				"$prog_name" "$1"
+			exit 1
+		fi
+		update_childs=y
+
 		# While there might be more reasons to revoke certificate other
 		# than keyCompromise (1) we revoke all certificates using same
 		# private key to ensure no one is able to reuse it.

@@ -195,7 +195,7 @@ You are explicitly asked to reuse them as base for new certificate.
 
 Please answer YES (all uppercase) only if you have valid passphrase
 for pkey and that key is not compromised (in that case you should
-revoke certificate with "revoke-full" <filename> command!!!).
+revoke certificate with "revoke-full <serial>" command!!!).
 
 YES to reuse: ' "${cs_file##*/}" "${pk_file##*/}"
 
@@ -773,7 +773,7 @@ cat <<EOF
 In case of password lost for PRIVATE KEY there is NO way to recover it
 and you MUST revoke corresponding certificate using either of commands:
 
-  revoke-full '$KEY_CN.crt' or revoke-full '<serial>.pem'
+  revoke-full <serial>
 
 Never store passwords for private keys somewhere in plain text. Always
 revoke certificates if device with PRIVATE KEY is stolen or lost.
