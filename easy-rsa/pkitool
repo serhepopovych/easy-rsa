@@ -556,7 +556,8 @@ if [ -d "$KEY_DIR" ] && [ "$KEY_CONFIG" ]; then
 
 		DO_CA=1
 	    fi
-	fi && {
+	fi && \
+	if [ -n 'x' ]; then
 	    if [ $DO_P12 -gt 0 ]; then
 		$OPENSSL pkcs12 $P12_NODES -export -inkey "$FN.key" \
 		    -out "$FN.p12" -in "$FN.crt" -certfile "$CA.crt"  && \
@@ -578,7 +579,7 @@ if [ -d "$KEY_DIR" ] && [ "$KEY_CONFIG" ]; then
 	    else
 		! :
 	    fi ||:
-	}
+	fi
     fi
 
     # Point to the key/csr/crt to help caller find ones we managed
