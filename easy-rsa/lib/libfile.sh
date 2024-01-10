@@ -65,6 +65,37 @@ pop_dir()
 	cd "$pd_oldpwd" 2>/dev/null
 }
 
+# Usage: normalize_path() <path> [<var_result>]
+normalize_path()
+{
+	local func="${FUNCNAME:-normalize_path}"
+
+	local path="${1:?missing 1st arg to ${func}() (<path>)}"
+	local file='' p
+
+	local rc=0
+
+	if [ ! -d "${path}" ]; then
+		file="${path##*/}"
+		if [ -n "$file" ]; then
+			p="${path%/*}/"
+			[ -d "$p" ] && path="$p" || rc=''
+		else
+			rc=''
+		fi
+	fi
+
+	if [ -n "$rc" ]; then
+		cd "${path}" &&
+			path="${PWD%/}/${file}" &&
+		cd - >/dev/null || rc=$?
+	else
+		rc=0
+	fi
+
+	return_var $rc "$path" "${2-}"
+}
+
 # Usage: relative_path <src> <dst> [<var_result>]
 relative_path()
 {
@@ -73,27 +104,12 @@ relative_path()
 	local rp_src="${1:?missing 1st arg to ${func}() (<src>)}"
 	local rp_dst="${2:?missing 2d arg to ${func}() (<dst>)}"
 
-	local rp_target
-
-	# handle '/'
-	rp_src="${rp_src%%/}"
-	rp_src="${rp_src:-/.}"
-
 	# add last component from src if dst ends with '/'
-	rp_target="${rp_dst##*/}"
-
-	if [ -n "$rp_target" ]; then
-		rp_target="${rp_dst##*/}"
-		rp_dst="${rp_dst%$rp_target}"
-	else
-		rp_target="${rp_src##*/}"
-	fi
+	[ -n "${rp_dst##*/}" ] || rp_dst="${rp_dst}${rp_src##*/}"
 
 	# normalize pathes first
-	rp_src="$(readlink -m "${rp_src}")" || return
-	rp_dst="$(readlink -f "${rp_dst}")" || return
-
-	rp_dst="$rp_dst/$rp_target"
+	normalize_path "${rp_src}" rp_src || return
+	normalize_path "${rp_dst}" rp_dst || return
 
 	# strip leading and add trailing '/'
 	rp_src="${rp_src#/}/"
@@ -118,7 +134,7 @@ relative_path()
 		  sed -e 's|\(/[^/]\+\)|../|g')${rp_src}" || \
 		return
 
-	return_var 0 "${rp_dst}" "$3"
+	return_var 0 "${rp_dst}" "${3-}"
 }
 
 # Usage: rights_human2octal <rights>
