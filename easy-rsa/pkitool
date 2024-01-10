@@ -219,7 +219,6 @@ DO_CRT=''
 CA_EXT=''
 CA='ca'
 DO_P12=''
-P12_NODES='-nodes'
 DO_P11=''
 # must be set or errors of openssl.cnf
 PKCS11_MODULE_PATH='dummy'
@@ -477,11 +476,6 @@ if [ $DO_ROOT -eq 1 ]; then
     DO_P11='0'
     KEY_SAN=''
 else
-    # If we are generating pkcs12, only encrypt the final step
-    if [ $DO_P12 -eq 1 ]; then
-        P12_NODES="$REQ_NODES"
-        REQ_NODES='-nodes'
-    fi
     # Handle subjectAltName (SAN) from KEY_SAN variable
     if [ -n "$REQ_EXT" ]; then
         # server
@@ -530,7 +524,6 @@ if [ $DEBUG -eq 1 ]; then
     echo "CA_EXT='$CA_EXT'"
     echo "CA='$CA'"
     echo "DO_P12='$DO_P12'"
-    echo "P12_NODES='$P12_NODES'"
     echo "DO_P11='$DO_P11'"
     echo "PKCS11_MODULE_PATH='$PKCS11_MODULE_PATH'"
     echo "PKCS11_SLOT='$PKCS11_SLOT'"
@@ -626,9 +619,9 @@ else
 
     # Make pkcs12 bundle
     if [ $DO_P12 -gt 0 ]; then
-        $OPENSSL pkcs12 -export -certfile "$CA.crt" \
-            ${P12_NODES:--passout env:KEY_PASSPHRASE} -out "$FN/$FN.p12" \
-            -inkey "$FN/privkey.pem" -in "$FN/cert.pem" \
+        $OPENSSL pkcs12 -export -out "$FN/$FN.p12" \
+            ${REQ_NODES:--passin env:KEY_PASSPHRASE -passout env:KEY_PASSPHRASE} \
+            -certfile "$CA.crt" -inkey "$FN/privkey.pem" -in "$FN/cert.pem" \
             -keypbe 'aes-256-cbc' -certpbe 'aes-256-cbc' -macalg 'sha256' &&
         chmod 0600 "$FN/$FN.p12" || exit
     elif [ $DO_P11 -gt 0 ]; then
