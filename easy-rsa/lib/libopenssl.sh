@@ -525,15 +525,15 @@ ossl_index_txt_status()
 	esac
 }
 
-# Usage: ossl_index_txt_filename <serial> ...
+# Usage: ossl_index_txt_filename <serial> [<crt_file>]
 ossl_index_txt_filename()
 {
-	local serial="$1"
-	shift
+	if [ "${2:-unknown}" != 'unknown' ]; then
+		echo "$2"
+	else
+		local serial="${1-}"
+		serial="${serial%.pem}" && [ -n "$serial" ] || return
 
-	if [ "$1" != 'unknown' ]; then
-		echo "$1"
-	elif [ -n "$serial" ]; then
 		echo "$serial.pem"
 	fi
 }
@@ -587,7 +587,8 @@ ossl_index_txt_same_pubkey_flist()
 	ossl_index_txt_same_pubkey_flist_cb()
 	{
 		# <serial>.pem if 'unknown' or specific name from index.txt
-		local pem="$(ossl_index_txt_filename "$7" "$8")"
+		local pem
+		pem="$(ossl_index_txt_filename "$7" "$8")" || return 0
 
 		if ! (V=0 valid_file "$pem"); then
 			pem="$(ossl_get_field4dn_by_name "$9" 'CN').crt"

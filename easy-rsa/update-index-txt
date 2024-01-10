@@ -100,7 +100,8 @@ cb()
 
 	local serial="$7"
 	# <serial>.pem if 'unknown' or specific name from index.txt
-	local "pem='$(ossl_index_txt_filename "$serial" "$8")'"
+	local pem
+	pem="$(ossl_index_txt_filename "$serial" "$8")" || return 0
 
 	# Common Name from Distinguished Name
 	local cn
