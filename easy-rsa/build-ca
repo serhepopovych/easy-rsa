@@ -63,14 +63,12 @@ elif [ -z "${PARENT_KEY_DIR-}" -o -z "${FN-}" ]; then
 	eval $(
 	    "$EASY_RSA/pkitool" 3>&1 >&4 \
 	        --sign --interact --inter --pass "$@"
-	) && [ -n "${FN-}" ] || exit
+	) && [ -n "${FN-}" -a ${DO_REQ:-0} -eq 1 ] || exit
 	exec 4>&-
 
 	{
 		# New csr/pkey generated: write KEY_PHASPHRASE to stdout
-		if [ $DO_REQ -eq 1 ]; then
-			echo "$KEY_PASSPHRASE"
-		fi
+		echo "$KEY_PASSPHRASE"
 	} | {
 		# Re-exec itself with exec-ca to switch to subCA config
 		exec "$EASY_RSA/exec-ca" \
