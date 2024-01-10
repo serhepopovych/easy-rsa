@@ -33,7 +33,7 @@ umask $(printf -- '%04o\n' $(($(umask) | 0022)))
 
 PROGNAME='pkitool'
 VERSION=2.0
-DEBUG=0
+[ "$DEBUG" -ge 0 ] 2>/dev/null || DEBUG=0
 
 if [ -n "${EASY_RSA-}" ]; then
     . "$EASY_RSA/lib/libopenssl.sh"
@@ -514,7 +514,7 @@ export \
     #
 
 # Show parameters (debugging)
-if [ $DEBUG -eq 1 ]; then
+if [ $DEBUG -ge 1 ]; then
     echo "BATCH='$BATCH'"
     echo "DO_ROOT='$DO_ROOT'"
     echo "DO_REQ='$DO_REQ'"
@@ -536,6 +536,7 @@ if [ $DEBUG -eq 1 ]; then
     echo "KEY_NAME='$KEY_NAME'"
     echo "KEY_SIZE='$KEY_SIZE'"
     echo "KEY_MD='$KEY_MD'"
+    echo "KEY_SAN='$KEY_SAN'"
     echo "KEY_PASSPHRASE='$KEY_PASSPHRASE'"
 fi
 
