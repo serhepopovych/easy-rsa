@@ -11,4 +11,152 @@ fi
 # Source functions library
 . "$EASY_RSA/easy-rsa-lib.sh"
 
-exec "$EASY_RSA/pkitool" --interact "$@"
+# Usage: _publish ...
+_publish()
+{
+    # Requires: mktemp(1), mv(1), rm(1), ln(1), chmod(1),
+    #           getent(1), install(1)
+
+    local func="${FUNCNAME:-_publish}"
+
+    local pubdir="${SHARED_DIR_BASE-}"
+    local pkcs12_opts=''
+
+    # Directory where live certificate lineages published
+    pubdir=${pubdir:-~/.htdocs}
+    # openssl pkcs(1) options
+    pkcs12_opts="${pkcs12_opts:-\
+        -keypbe aes-256-cbc \
+        -certpbe aes-256-cbc \
+        -macalg sha256 \
+    }"
+
+    if [ ! -d "$pubdir" ]; then
+        echo >&2 "$prog_name: no public directory \"$pubdir\" exists"
+        exit 1
+    fi
+
+    if [ -n "${REQ_EXT-}" ]; then
+        # -extension server
+        pubdir="$pubdir/server"
+    else
+        # <none>
+        pubdir="$pubdir/client"
+    fi
+
+    if ! install -d "$pubdir"; then
+        echo >&2 "$prog_name: unable to create \"$pubdir\" directory"
+        exit 1
+    fi
+
+    ## Enter renewed certificate lineage
+
+    local domain pf
+    local t tf td
+
+    # Usage: exit_handler
+    exit_handler()
+    {
+        local rc=$?
+
+        # Do not interrupt exit hander
+        set +e
+
+        # Temporary output directory
+        [ -z "${td-}" ] || rm -rf "$td"
+
+        return $rc
+    }
+    trap 'exit_handler' EXIT
+
+    cd "$KEY_DIR/$FN"
+
+    pf='privkey.passphrase'
+
+    # chain.pem
+    [ '../export-ca.crt' -ef 'chain.pem' ] ||
+        ln -sf '../export-ca.crt' 'chain.pem'
+    # fullchain.pem
+    [ -s 'fullchain.pem' ] ||
+        cat 'cert.pem' 'chain.pem' >'fullchain.pem'
+
+    domain="$FN"
+
+    t="$pubdir/$domain"
+
+    td="$(mktemp -d "$pubdir/.$domain.XXXXXXXX")"
+    tf="$td/$domain.p12"
+
+    # Make PKCS#12 file
+    openssl pkcs12 \
+        $pkcs12_opts \
+        -export \
+        -certfile 'chain.pem' -in 'cert.pem' \
+        -passin 'stdin' <"$pf" -inkey 'privkey.pem' \
+        -passout "file:$pf" -out "$tf" \
+        #
+
+    # Ensure file is readable
+    chmod 0644 "$tf" ||:
+
+    # Add to directory with PKCS#12 file symlinks to IP address(es) from
+    {
+        # ... DNS resource records (RRs) for hostname
+        getent ahosts "$domain" ||:
+        # ... ".sticky" subdirectory
+        if cd "$t/.sticky" 2>/dev/null; then
+            td="$td/.sticky" && install -d -m 2775 "$td"
+            for ip in *; do
+                # It has invalid IP/IPv6 address symbols?
+                [ -n "${ip##*[!0-9a-fA-F:.]*}" ] || continue
+
+                if [ -L "$ip" ]; then
+                    # It is a symlink pointing to /dev/null?
+                    [ "$ip" -ef /dev/null ] || continue
+                    echo "-$ip"
+                    ln -sf /dev/null "$td/$ip"
+                else
+                    # It is a regular file?
+                    [ -f "$ip" ] || continue
+                    echo "$ip"
+                    : >"$td/$ip"
+                fi
+            done
+            cd - >/dev/null
+        fi
+    } |\
+    while read ip _; do
+        if [ -n "${ip##-*}" ]; then
+            ip="$td/$ip" && [ "$ip" -ef "$td" ] || ln -sf . "$ip"
+        else
+            ip="$td/${ip#-}" && rm -f "$ip"
+        fi
+    done
+
+    # Install new (temporary) data
+    if ! [ -e "$t" ] || mv -f "$t" "$td"; then
+        if mv -f "$td" "$t"; then
+            chmod 0755 "$t" ||:
+            td="$t/$domain"
+        else
+            mv -f "$td/$domain" "$t" ||:
+        fi
+    fi
+
+    ## Leave renewed certificate lineage
+    cd - >/dev/null 2>&1
+
+    exit 0
+} # _publish
+
+exec 4>&1
+eval $(
+    # Always create new passphrase (see pkitool --pass)
+    KEY_PASSPHRASE=''
+
+    "$EASY_RSA/pkitool" 3>&1 >&4 \
+        --interact --pass "$@"
+) && [ -n "${FN-}" ] || exit
+exec 4>&-
+
+_publish

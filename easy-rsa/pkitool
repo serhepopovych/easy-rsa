@@ -665,7 +665,9 @@ fi
         FN='$FN'
         DO_ROOT='$DO_ROOT'
         DO_REQ='$DO_REQ'
+        REQ_EXT='$REQ_EXT'
         DO_CRT='$DO_CRT'
+        CA_EXT='$CA_EXT'
         DO_P12='$DO_P12'
         DO_P11='$DO_P11'
     "

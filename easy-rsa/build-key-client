@@ -11,4 +11,4 @@ fi
 # Source functions library
 . "$EASY_RSA/easy-rsa-lib.sh"
 
-exec "$EASY_RSA/pkitool" --interact --client "$@"
+exec "$EASY_RSA/build-key" --client "$@"

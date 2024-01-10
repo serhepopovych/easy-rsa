@@ -26,6 +26,8 @@ $HTTP["host"] =~ "^@fqdn_regex@(:|$)" {
 
   var.url_suffix_regex    = url_path_regex + "$"
 
+  var.url_p12_regex = url_prefix_ca_regex + url_path_regex + "/[^/]+\.p12$"
+
   ## userdir
 
   var.userdir_exclude_user = (

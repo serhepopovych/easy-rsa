@@ -12,4 +12,4 @@ fi
 # Source functions library
 . "$EASY_RSA/easy-rsa-lib.sh"
 
-exec "$EASY_RSA/pkitool" --interact --pkcs12 "$@"
+exec "$EASY_RSA/build-key" --pkcs12 "$@"
