@@ -94,7 +94,7 @@ elif [ -s "$PARENT_KEY_DIR/$FN/cert.pem" ]; then
 		export KEY_PASSPHRASE
 
 		# Cleanup CA and all it's subCAs
-		"$EASY_RSA/clean-all" || exit
+		KEY_PASSPHRASE='' "$EASY_RSA/clean-all" || exit
 
 		# Change private key passphrase to set intermediate CA
 		# CA_PASSPHRASE or generate new one as initially we encrypted
