@@ -217,7 +217,7 @@ DO_REQ=''
 REQ_EXT=''
 DO_CRT=''
 CA_EXT=''
-CA='ca'
+CA="${IN_EXEC_CA:-ca}"
 DO_P12=''
 DO_P11=''
 # must be set or errors of openssl.cnf
@@ -543,15 +543,15 @@ fi
 if [ $DO_ROOT -eq 1 ]; then
     $OPENSSL req $BATCH -days $CA_EXPIRE -x509 \
         ${REQ_NODES:--passout env:KEY_PASSPHRASE} \
-        -new -newkey rsa:$KEY_SIZE -keyout "$FN.key" \
-        -out "$FN.crt" \
+        -new -newkey rsa:$KEY_SIZE -keyout 'ca.key' \
+        -out 'ca.crt' \
         -config "$KEY_CONFIG" &&
-    chmod 0600 "$FN.key" || exit
+    chmod 0600 'ca.key' || exit
 else
     # Make sure CA key/cert is available
     if [ $DO_CRT -eq 1 -o $DO_P12 -eq 1 ]; then
-        if ! [ -s "$CA.crt" -a -s "$CA.key" ]; then
-            echo "$PROGNAME: Need a readable $CA.crt and $CA.key in $KEY_DIR"
+        if ! [ -s 'ca.crt' -a -s 'ca.key' ]; then
+            echo "$PROGNAME: Need a readable ca.crt and ca.key in $KEY_DIR"
             echo "Try $PROGNAME --initca to build a root certificate/key."
             exit 1
         fi
@@ -602,7 +602,7 @@ else
         if [ $DO_CRT -gt 1 -a -s "$FN/cert.pem" ]; then
             DO_CRT=0
         else
-            days="$(ossl_cert_read_date2ts "$CA.crt" -end)" &&
+            days="$(ossl_cert_read_date2ts 'ca.crt' -end)" &&
             days="$(ossl_cert_expires_in_days "$days")" || exit
 
             [ $days -le $KEY_EXPIRE ] || days=$KEY_EXPIRE
@@ -621,7 +621,7 @@ else
     if [ $DO_P12 -gt 0 ]; then
         $OPENSSL pkcs12 -export -out "$FN/$FN.p12" \
             ${REQ_NODES:--passin env:KEY_PASSPHRASE -passout env:KEY_PASSPHRASE} \
-            -certfile "$CA.crt" -inkey "$FN/privkey.pem" -in "$FN/cert.pem" \
+            -certfile 'ca.crt' -inkey "$FN/privkey.pem" -in "$FN/cert.pem" \
             -keypbe 'aes-256-cbc' -certpbe 'aes-256-cbc' -macalg 'sha256' &&
         chmod 0600 "$FN/$FN.p12" || exit
     elif [ $DO_P11 -gt 0 ]; then
