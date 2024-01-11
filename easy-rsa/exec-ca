@@ -126,6 +126,8 @@ EOF
 		${env_vars} \
 		-- '"$0"' '"$@"'
 else
+	prog_name="${0##*/}"
+
 	# Source functions library
 	. "$EASY_RSA/lib/librtti.sh"
 
@@ -136,6 +138,34 @@ else
 	if ! . "$VARS_FILE"; then
 		fatal '%s: sourcing vars file ("%s") failed\n' \
 		      "$prog_name" "$VARS_FILE"
+	fi
+
+	# Change working directory to $VARS_DIR
+	cd "$VARS_DIR" ||:
+
+	# Update PATH with EASY_RSA directory at the top
+	PATH="$EASY_RSA:$EASY_RSA/extensions/xbin:$PATH"
+
+	# Command to run with CA environment or $SHELL if no command is given
+	if [ $# -eq 0 ]; then
+		command="${SHELL:-/bin/sh}"
+		# Standard POSIX compatible PS1
+		export PS1="easy-rsa:$IN_EXEC_CA> "
+	else
+		if ! command="$(command -v "$1")" ||
+		   ! [ -x "$command" ]
+		then
+			fatal '%s: no such command "%s"\n' \
+				"$prog_name" "$command"
+		fi
+		shift
+
+		if [ "$command" -ef "$EASY_RSA/build-ca" ] ||
+		   [ "$command" -ef "$EASY_RSA/clean-all" ]
+		then
+			# Bypass _this() in easy-rsa-lib.sh bootstrap code
+			this="$command"
+		fi
 	fi
 
 	# Source functions library
@@ -166,22 +196,6 @@ else
 		fi
 	}
 	vars_file_access_ok
-
-	# Command to run with CA environment or $SHELL if no command is given
-	if [ $# -eq 0 ]; then
-		command="${SHELL:-/bin/sh}"
-		# Standard POSIX compatible PS1
-		export PS1="easy-rsa:$IN_EXEC_CA> "
-	else
-		command="$1"
-		shift
-	fi
-
-	# Update PATH with EASY_RSA directory at the top
-	PATH="$EASY_RSA:$EASY_RSA/extensions/xbin:$PATH"
-
-	# Change working directory to $VARS_DIR
-	cd "$VARS_DIR" ||:
 
 	exec "$command" "$@"
 fi
