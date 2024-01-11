@@ -101,9 +101,6 @@ FN="$1"
 # Key Common Name (will be picked from $FN by pkitool)
 KEY_CN=''
 
-# Make X509 Name from Common Name
-make_shlvar_name "$FN" KEY_NAME || exit
-
 # remote
 [ -n "${OVPN_REMOTE-}" ] || OVPN_REMOTE="$HOSTNAME" ||
     error 'cannot determine remote name: using localhost\n' ||

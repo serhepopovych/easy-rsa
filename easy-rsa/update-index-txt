@@ -105,13 +105,13 @@ cb()
 	ln -nf "$pem" "$KEY_DIR_EXPIRED" 2>/dev/null ||:
 
 	# Common Name from Distinguished Name
-	local CN
-	if CN="$(ossl_get_field4dn_by_name "$9" 'CN')"; then
-		local crt="$CN/cert.pem${5:+.revoked}"
+	local FN
+	if FN="$(ossl_get_field4dn_by_name "$9" 'name')"; then
+		local crt="$FN/cert.pem${5:+.revoked}"
 
-		# <CN>/cert.pem is same file and thus expired too: move it
+		# <FN>/cert.pem is same file and thus expired too: move it
 		if cmp -s "$crt" "$pem"; then
-			if mv -f "$CN" "$KEY_DIR_EXPIRED"; then
+			if mv -f "$FN" "$KEY_DIR_EXPIRED"; then
 				ln -sf "$crt" "$KEY_DIR_EXPIRED/$pem" ||:
 			fi 2>/dev/null
 		fi

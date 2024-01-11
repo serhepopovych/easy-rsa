@@ -25,9 +25,6 @@
 
 # pkitool is a front-end for the openssl tool.
 
-# Calling scripts can also set the KEY_NAME environmental
-# variable to set the "name" X509 subject field.
-
 # Adjust umask to unset group and others write bit
 umask $(printf -- '%04o\n' $(($(umask) | 0022)))
 
@@ -157,12 +154,11 @@ usage()
     echo '(Files will be placed in the $KEY_DIR directory, defined in ./vars)'
     echo "  ca.crt      -> root certificate (--ca)"
     echo "  ca.key      -> root key, keep secure (not directly used)"
-    echo "   {common-name|file-name}/"
-    echo "     cert.pem     -> client/server certificate (--cert)"
-    echo "     privkey.pem  -> private key, keep secure (--key)"
-    echo "     cert.csr     -> certificate signing request (not directly used)"
-    echo "     {common-name|file-name}.p12"
-    echo "                  -> PKCS#12 file with cert, privkey and ca.crt"
+    echo "   file-name/"
+    echo "     cert.pem      -> client/server certificate (--cert)"
+    echo "     privkey.pem   -> private key, keep secure (--key)"
+    echo "     cert.csr      -> certificate signing request (not directly used)"
+    echo "     file-name.p12 -> PKCS#12 file with cert, privkey and ca.crt"
     echo "  dh2048.pem  -> Diffie Hellman parameters (--dh)"
     echo
     echo "Examples:"
@@ -176,7 +172,7 @@ usage()
     echo "  $PROGNAME --csr client4     -> Build \"client4\" CSR to be signed by another CA"
     echo "  $PROGNAME --sign client4    -> Sign \"client4\" CSR"
     echo "  $PROGNAME --inter interca   -> Build an intermediate key-signing certificate/key"
-    echo "                               Also see ./inherit-inter script."
+    echo
     echo "  $PROGNAME --pkcs11 /usr/lib/pkcs11/lib1 0 010203 \"client5 id\" client5"
     echo "                              -> Build \"client5\" certificate/key in PKCS#11 token"
     echo
@@ -363,17 +359,62 @@ while [ $# -gt 0 ]; do
     shift
 done
 
+if [ $# -gt 1 ]; then
+    usage
+    exit 1
+fi
+
 if [ -n "$BATCH" ]; then
     if $OPENSSL version | grep '0\.9\.6' >/dev/null 2>&1; then
         die 'Batch mode is unsupported in openssl<0.9.7'
     fi
 fi
 
+# Set KEY_CN
+if [ -z "$KEY_CN" ]; then
+    if [ -n "$1" ]; then
+        KEY_CN="$1"
+    elif [ $DO_ROOT -eq 1 ]; then
+        KEY_CN="${KEY_ORG:+$KEY_ORG }Root CA"
+    else
+        die 'Missing or empty KEY_CN and not building root CA with --initca'
+    fi
+fi
+
+# Sanitize parameters
 if [ $DO_ROOT -eq 1 ]; then
-    if [ $DO_REQ -gt 0 -o $DO_CRT -gt 0 -o $DO_P12 -gt 0 -o $DO_P11 -gt 0 ]; then
+    if [ $DO_REQ -ne 0 -o $DO_CRT -ne 0 -o $DO_P12 -ne 0 -o $DO_P11 -ne 0 ]; then
         die '--initca and --csr and/or --sign and/or --pkcs11 and/or --pkcs12 cannot be specified together'
     fi
+
+    REQ_EXT=''
+    CA_EXT=''
+    KEY_SAN=''
 else
+    # Handle subjectAltName (SAN) from KEY_SAN variable
+    if [ -n "$REQ_EXT" ]; then
+        # server
+        KS1="DNS:$KEY_CN"
+    else
+        if [ -n "$CA_EXT" ]; then
+            # v3_ca (does not have ones?)
+            KS1=''
+            KEY_SAN=''
+        else
+            # client
+            KS1='email:copy'
+        fi
+    fi
+    if [ -n "$KEY_SAN" ]; then
+        KS2=",$KEY_SAN,"
+        if [ -n "${KS2##*,$KS1,*}" ]; then
+            KEY_SAN="$KS1,$KEY_SAN"
+        fi
+    else
+        KEY_SAN="$KS1"
+    fi
+    unset KS1 KS2
+
     DO_REQ="${DO_REQ:-1}"
     DO_CRT="${DO_CRT:-1}"
     DO_P12="${DO_P12:-0}"
@@ -397,29 +438,21 @@ if ! cd "$KEY_DIR"; then
     die "Cannot change directory to $KEY_DIR"
 fi
 
-# Set KEY_CN, FN
-if [ $# -gt 1 ]; then
-    usage
-    exit 1
-fi
-
-if [ -z "$KEY_CN" ]; then
-    if [ -n "$1" ]; then
-        KEY_CN="$1"
-    elif [ $DO_ROOT -eq 1 ]; then
-        KEY_CN="${KEY_ORG:+$KEY_ORG }Root CA"
-    else
-        die 'Missing or empty KEY_CN and not building root CA with --initca'
-    fi
-fi
+# Use FN
 if [ -n "$BATCH" ]; then
-    echo "Using Common Name: $KEY_CN"
+    echo "Using X509 Common Name: $KEY_CN"
 fi
 
-if [ -n "$1" ]; then
-    FN="$1"
+if [ $DO_ROOT -eq 1 ]; then
+    FN="$CA"
 else
-    FN="$KEY_CN"
+    if [ -n "$1" ]; then
+        FN="$1"
+    else
+        FN="$KEY_CN"
+    fi
+
+    FN="$(echo "$FN" | tr -d -c '[:alnum:]_+-.@')"
 fi
 
 # Use password to protect private key
@@ -450,9 +483,7 @@ if [ "$KEY_EXPIRE" -lt 1 ] 2>/dev/null; then
 fi
 
 # Set X509 Name string to filename
-if [ -z "$KEY_NAME" ]; then
-    KEY_NAME="$(echo "$FN" | tr -d ' ')"
-fi
+KEY_NAME="$FN"
 
 # Set default private key size
 if [ "$KEY_SIZE" -lt 2048 ] 2>/dev/null; then
@@ -462,42 +493,6 @@ fi
 # Set default message digest algo
 if [ -z "$KEY_MD" ]; then
     KEY_MD='sha256'
-fi
-
-# Sanitize parameters
-if [ $DO_ROOT -eq 1 ]; then
-    FN="$CA"
-    DO_REQ='0'
-    REQ_EXT=''
-    DO_CRT='0'
-    CA_EXT=''
-    DO_P12='0'
-    DO_P11='0'
-    KEY_SAN=''
-else
-    # Handle subjectAltName (SAN) from KEY_SAN variable
-    if [ -n "$REQ_EXT" ]; then
-        # server
-        KS1="DNS:$KEY_CN"
-    else
-        if [ -n "$CA_EXT" ]; then
-            # v3_ca (does not have ones?)
-            KS1=''
-            KEY_SAN=''
-        else
-            # client
-            KS1='email:copy'
-        fi
-    fi
-    if [ -n "$KEY_SAN" ]; then
-        KS2=",$KEY_SAN,"
-        if [ -n "${KS2##*,$KS1,*}" ]; then
-            KEY_SAN="$KS1,$KEY_SAN"
-        fi
-    else
-        KEY_SAN="$KS1"
-    fi
-    unset KS1 KS2
 fi
 
 export \

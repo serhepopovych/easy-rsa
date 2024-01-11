@@ -592,7 +592,7 @@ ossl_index_txt_same_pubkey_flist()
 
 		while ! (V=0 valid_file "$pem"); do
 			if ! [ -n "${pem##*/cert.pem}" ] ||
-			   ! pem="$(ossl_get_field4dn_by_name "$9" 'CN')" ||
+			   ! pem="$(ossl_get_field4dn_by_name "$9" 'name')" ||
 			   ! pem="$pem/cert.pem"
 			then
 				return 0
@@ -684,21 +684,21 @@ ossl_index_txt_revoke_certs()
 		# issued certificates with the same CN will never reuse
 		# possibly compromised private key and we have a copy.
 
-		if CN="$(ossl_get_field4dn_by_name "$subject" 'CN')"; then
-			for FN in \
+		if FN="$(ossl_get_field4dn_by_name "$subject" 'name')"; then
+			for CN in \
 				'cert.pem' \
 				'cert.csr' \
 				'privkey.pem' \
-				"$CN.p12" \
+				"$FN.p12" \
 				#
 			do
-				if FN="$CN/$FN" && [ -e "$FN" ]; then
-					mv -f "$FN" "$FN.revoked" ||:
+				if CN="$FN/$CN" && [ -e "$CN" ]; then
+					mv -f "$CN" "$CN.revoked" ||:
 				fi
 			done
 
 			# Store in list of revoked certificates for rollback
-			revoked_list="'$CN' $revoked_list"
+			revoked_list="'$FN' $revoked_list"
 		fi 2>/dev/null
 	done
 
@@ -708,16 +708,16 @@ ossl_index_txt_revoke_certs()
 		# Rollback certificate revocation on failure
 		eval "set -- $revoked_list"
 
-		for CN in "$@"; do
-			for FN in \
+		for FN in "$@"; do
+			for CN in \
 				'cert.pem' \
 				'cert.csr' \
 				'privkey.pem' \
-				"$CN.p12" \
+				"$FN.p12" \
 				#
 			do
-				if FN="$CN/$FN.revoked" && [ -e "$FN" ]; then
-					mv -f "$FN" "${FN%.revoked}" ||:
+				if CN="$FN/$CN.revoked" && [ -e "$CN" ]; then
+					mv -f "$CN" "${CN%.revoked}" ||:
 				fi
 			done
 		done 2>/dev/null
