@@ -407,10 +407,9 @@ if [ -z "$KEY_CN" ]; then
     if [ -n "$1" ]; then
         KEY_CN="$1"
     elif [ $DO_ROOT -eq 1 ]; then
-        KEY_CN="${KEY_ORG:+$KEY_ORG }CA"
+        KEY_CN="${KEY_ORG:+$KEY_ORG }Root CA"
     else
-        usage
-        exit 1
+        die 'Missing or empty KEY_CN and not building root CA with --initca'
     fi
 fi
 if [ -n "$BATCH" ]; then
