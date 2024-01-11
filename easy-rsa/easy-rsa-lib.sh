@@ -149,8 +149,10 @@ try_passphrase()
 	local vars_file="${2:?missing 1st arg to ${func}() <vars_file>}"
 
 	eval "
-		  if pw_old=\"\${$var_name-}\" &&
-		     pw_valid \"\$pw_old\"
+		local pp_old pp_new
+
+		  if pp_old=\"\${$var_name-}\" &&
+		     pw_valid \"\$pp_old\"
 		then
 			return
 		elif pp_new=\"\$(pw_make 16)\" &&
@@ -170,7 +172,7 @@ try_passphrase()
 		    -e "s|$r|\1='$pp_new'\3\4|" || return
 	else
 		echo >>"$vars_file" \
-		   "export $var_name='$pw_new'" || return
+		   "export $var_name='$pp_new'" || return
 	fi
 
 	chmod -f go= "$vars_file" || return
