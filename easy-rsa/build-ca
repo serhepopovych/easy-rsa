@@ -61,6 +61,9 @@ elif [ -z "${PARENT_KEY_DIR-}" -o -z "${FN-}" ]; then
 	# using a locally generated root certificate
 	exec 4>&1
 	eval $(
+	    # Force pkitool to expect an argument (i.e. file-name)
+	    KEY_CN=''
+
 	    "$EASY_RSA/pkitool" 3>&1 >&4 \
 	        --sign --interact --inter --pass "$@"
 	) && [ -n "${FN-}" -a ${DO_REQ:-0} -eq 1 ] || exit
