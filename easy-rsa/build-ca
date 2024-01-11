@@ -36,7 +36,7 @@ Type YES (uppercase) if you really want to recreate THIS CA: ' \
 	try_passphrase 'CA_PASSPHRASE' "$VARS_FILE"
 
 	# Build a root certificate and empty certificate revocation list.
-	"$EASY_RSA/pkitool" --interact --initca "$@"
+	"$EASY_RSA/pkitool" --interact --initca --pass "$@"
 elif [ -z "${PARENT_KEY_DIR-}" -o -z "${FN-}" ]; then
 	# build-inter
 	if [ "$prog_name" != 'build-inter' ]; then
