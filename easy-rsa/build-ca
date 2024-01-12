@@ -65,7 +65,7 @@ elif [ -z "${PARENT_KEY_DIR-}" -o -z "${FN-}" ]; then
 	    KEY_CN=''
 
 	    "$EASY_RSA/pkitool" 3>&1 >&4 \
-	        --sign --interact --inter --pass "$@"
+	        --interact --inter --pass "$@"
 	) && [ -n "${FN-}" -a ${DO_REQ:-0} -eq 1 ] || exit
 	exec 4>&-
 
