@@ -542,6 +542,9 @@ if [ $DO_ROOT -eq 1 ]; then
         -out 'ca.crt' \
         -config "$KEY_CONFIG" &&
     chmod 0600 'ca.key' || exit
+
+    # Point CA to $KEY_DIR
+    ln -sf . "$FN"
 else
     # Make sure CA key/cert is available
     if [ $DO_CRT -eq 1 -o $DO_P12 -eq 1 ]; then
@@ -633,13 +636,24 @@ else
     fi
 fi
 
-if [ -n "$KEY_PASSPHRASE" ]; then
-    if [ $DO_REQ -eq 1 -a -n "$KEY_SAN" ]; then
-        # Store passphrase only for non-CA private keys
-        f=$(umask)
-        umask 0077
-        echo "$KEY_PASSPHRASE" >"$FN/privkey.passphrase"
-        umask $f
+if [ -n "$KEY_SAN" ]; then
+    # Non-CA certificates
+    if [ $DO_REQ -eq 1 ]; then
+        if [ -n "$KEY_PASSPHRASE" ]; then
+            # Store passphrase of private keys
+            f=$(umask)
+            umask 0077
+            echo "$KEY_PASSPHRASE" >"$FN/privkey.passphrase"
+            umask $f
+        fi
+    fi
+else
+    # Root or Intermediate CA certificates
+    if [ $DO_ROOT -eq 1 -o $DO_REQ -eq 1 ]; then
+        ln -sf 'ca.key' 'privkey.pem'
+    fi
+    if [ $DO_ROOT -eq 1 -o $DO_CRT -eq 1 ]; then
+        ln -sf 'ca.crt' 'cert.pem'
     fi
 fi
 
