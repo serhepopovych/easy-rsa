@@ -111,6 +111,35 @@ strstrip()
 	return_var 0 "${__stripret__}" "${3-}"
 }
 
+# Usage: strsqueeze <str> [set1] [<var_result>]
+strsqueeze()
+{
+	local func="${FUNCNAME:-strsqueeze}"
+
+	local str="${1:?missing 1st arg to ${func}() <str>}"
+	local set1="${2:?missing 2d arg to ${func}() <set1>}"
+
+	local c t res
+	while [ -n "$set1" ]; do
+		c="$set1"
+		set1="${set1#?}"
+		c="${c%$set1}"
+
+		res=''
+		while :; do
+			t="${str%%$c*}"
+			[ "$t" != "${str%$c}" ] || break
+			t="$t$c"
+			res="$res$t"
+
+			strlstrip "${str#$t}" "$c" 'str' || return
+		done
+		str="$res$str"
+	done
+
+	return_var 0 "$str" "${3-}"
+}
+
 # Usage: make_shlvar_name <str> [<var_result>]
 make_shlvar_name()
 {

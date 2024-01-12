@@ -8,6 +8,7 @@ __libfile_sh__=1
 
 # Source functions libraries
 . "$EASY_RSA/lib/librtti.sh"
+. "$EASY_RSA/lib/libstring.sh"
 
 # Usage: push_dir <dir> <var_level> <var_oldpwd>
 push_dir()
@@ -70,30 +71,37 @@ normalize_path()
 {
 	local func="${FUNCNAME:-normalize_path}"
 
-	local path="${1:?missing 1st arg to ${func}() (<path>)}"
-	local file='' p
+	local file="${1:?missing 1st arg to ${func}() (<path>)}"
+	local path='' f
 
-	local rc=0
+	# make relative path absolute
+	[ -z "${file##/*}" ] || file="/$PWD/$file"
 
-	if [ ! -d "${path}" ]; then
-		file="${path##*/}"
-		if [ -n "$file" ]; then
-			p="${path%/*}/"
-			[ -d "$p" ] && path="$p" || rc=''
-		else
-			rc=''
-		fi
-	fi
+	# squeeze multiple '/' to single one
+	strsqueeze "$file" '/' 'file' || return
 
-	if [ -n "$rc" ]; then
-		cd "${path}" &&
-			path="${PWD%/}/${file}" &&
-		cd - >/dev/null || rc=$?
-	else
-		rc=0
-	fi
+	# ending with '/'
+	file="${file%/}/"
 
-	return_var $rc "$path" "${2-}"
+	# not beginning with '/'/
+	file="${file#/}"
+
+	while [ -n "$file" ]; do
+		f="${file%%/*}"
+		case "$f" in
+			'.')
+				;;
+			'..')
+				path="${path%/*}"
+				;;
+			*)
+				path="$path/$f"
+				;;
+		esac
+		file="${file#*/}"
+	done
+
+	return_var 0 "$path" "${2-}"
 }
 
 # Usage: relative_path <src> <dst> [<var_result>]
