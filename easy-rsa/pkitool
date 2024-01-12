@@ -609,7 +609,9 @@ else
                 ${CA_PASSPHRASE:+-passin env:CA_PASSPHRASE} \
                 -out "$FN/cert.pem" -in "$FN/cert.csr" \
                 -config "$KEY_CONFIG" &&
-            [ -s "$FN/cert.pem" ] || exit
+            [ -s "$FN/cert.pem" ] &&
+            eval "$($OPENSSL x509 -noout -serial -in "$FN/cert.pem")" &&
+            ln -sf "$FN/cert.pem" "$serial.pem" || exit
 
             DO_CRT=1
         fi

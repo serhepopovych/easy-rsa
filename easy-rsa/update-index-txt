@@ -98,30 +98,25 @@ cb()
 		return 0
 	fi
 
-	# <serial>.pem if 'unknown' or specific name from index.txt
-	local pem
-	pem="$(ossl_index_txt_filename "$7" "$8")" || return 0
-
-	ln -nf "$pem" "$KEY_DIR_EXPIRED" 2>/dev/null ||:
-
 	# Common Name from Distinguished Name
 	local FN
 	if FN="$(ossl_get_field4dn_by_name "$9" 'name')"; then
 		local crt="$FN/cert.pem${5:+.revoked}"
 
-		# <FN>/cert.pem is same file and thus expired too: move it
-		if cmp -s "$crt" "$pem"; then
+		# <serial>.pem if 'unknown' or specific name from index.txt
+		local pem
+		pem="$(ossl_index_txt_filename "$7" "$8")" || return 0
+
+		# <FN>/cert.pem and $pem is same file: move it to expired
+		if [ "$crt" -ef "$pem" ]; then
 			if mv -f "$FN" "$KEY_DIR_EXPIRED"; then
 				ln -sf "$crt" "$KEY_DIR_EXPIRED/$pem" ||:
+				rm -f "$pem" ||:
+				echo "$line" >>"$index_txt_expired"
 			fi 2>/dev/null
 		fi
 	fi
-
-	rm -f "$pem" ||:
-
-	echo "$line" >>"$index_txt_expired"
 }
-
 ossl_index_txt_for_each_line 'cb' "$index_txt"
 
 if cmp -s "$index_txt_tmp" "$index_txt"; then

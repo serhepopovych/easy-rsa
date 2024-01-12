@@ -1,6 +1,7 @@
 #!/bin/sh
 
-# Requires: cat(1), mv(1), rm(1), sed(1), tr(1), date(1), cmp(1), openssl(1)
+# Requires: cat(1), mv(1), ln(1), rm(1), sed(1), tr(1), date(1), cmp(1),
+#           openssl(1)
 
 [ -z "${__libopenssl_sh__-}" ] || return 0
 __libopenssl_sh__=1
@@ -686,19 +687,22 @@ ossl_index_txt_revoke_certs()
 
 		if FN="$(ossl_get_field4dn_by_name "$subject" 'name')"; then
 			for CN in \
-				'cert.pem' \
 				'cert.csr' \
 				'privkey.pem' \
 				"$FN.p12" \
+				'cert.pem' \
 				#
 			do
 				if CN="$FN/$CN" && [ -e "$CN" ]; then
 					mv -f "$CN" "$CN.revoked" ||:
 				fi
 			done
+			if CN="$CN.revoked" && [ -e "$CN" ]; then
+				ln -sf "$CN" "$serial.pem" ||:
+			fi
 
 			# Store in list of revoked certificates for rollback
-			revoked_list="'$FN' $revoked_list"
+			revoked_list="'$FN/$serial' $revoked_list"
 		fi 2>/dev/null
 	done
 
@@ -709,17 +713,23 @@ ossl_index_txt_revoke_certs()
 		eval "set -- $revoked_list"
 
 		for FN in "$@"; do
+			serial="${FN##*/}"
+			FN="${FN%%/*}"
+
 			for CN in \
-				'cert.pem' \
 				'cert.csr' \
 				'privkey.pem' \
 				"$FN.p12" \
+				'cert.pem' \
 				#
 			do
 				if CN="$FN/$CN.revoked" && [ -e "$CN" ]; then
 					mv -f "$CN" "${CN%.revoked}" ||:
 				fi
 			done
+			if CN="${CN%.revoked}" && [ -e "$CN" ]; then
+				ln -sf "$CN" "$serial.pem" ||:
+			fi
 		done 2>/dev/null
 
 		mv -f "$index_txt_revoke" "$index_txt" ||:
