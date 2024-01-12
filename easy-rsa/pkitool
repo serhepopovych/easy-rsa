@@ -633,13 +633,6 @@ else
     fi
 fi
 
-# Point to the key/csr/crt to help caller find ones we managed
-for f in "$FN/privkey.pem" "$FN/cert.csr" "$FN/cert.pem"; do
-    if [ -f "$f" ]; then
-        ln -sf "$f" "last-${f##*.}" || exit
-    fi
-done
-
 if [ -n "$KEY_PASSPHRASE" ]; then
     if [ $DO_REQ -eq 1 -a -n "$KEY_SAN" ]; then
         # Store passphrase only for non-CA private keys
