@@ -611,7 +611,8 @@ else
                 -config "$KEY_CONFIG" &&
             [ -s "$FN/cert.pem" ] &&
             eval "$($OPENSSL x509 -noout -serial -in "$FN/cert.pem")" &&
-            ln -sf "$FN/cert.pem" "$serial.pem" || exit
+            ln -sf "$FN/cert.pem" "$serial.pem" &&
+            echo "$serial" >"$FN/cert.serial" || exit
 
             DO_CRT=1
         fi
