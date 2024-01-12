@@ -13,28 +13,24 @@ fi
 # ca
 t="$SHARED_CA_URL/"
 [ -z "${t##$SHARED_URL_BASE/*}" ] || \
-	error '%s: %s must be suburl under %s\n' \
-		"$prog_name" 'SHARED_CA_URL'   'SHARED_URL_BASE' || \
-	exit
+	fatal '%s must be suburl under %s\n' \
+		'SHARED_CA_URL'   'SHARED_URL_BASE'
 
 t="$SHARED_CA_DIR/"
 [ -z "${t##$SHARED_DIR_BASE/*}" ] || \
-	error '%s: %s must be under %s\n' \
-		"$prog_name" 'SHARED_CA_DIR'   'SHARED_DIR_BASE' || \
-	exit
+	fatal '%s must be under %s\n' \
+		'SHARED_CA_DIR'   'SHARED_DIR_BASE'
 
 # ovpn
 t="${SHARED_OVPN_URL:+$SHARED_OVPN_URL/}"
 [ -z "${t##$SHARED_URL_BASE/*}" ] || \
-	error '%s: %s must be suburl under %s\n' \
-		"$prog_name" 'SHARED_OVPN_URL' 'SHARED_URL_BASE' || \
-	exit
+	fatal '%s must be suburl under %s\n' \
+		'SHARED_OVPN_URL' 'SHARED_URL_BASE'
 
 t="${SHARED_OVPN_DIR:+$SHARED_OVPN_DIR/}"
 [ -z "${t##$SHARED_DIR_BASE/*}" -o -z "${t##$KEY_DIR/*}" ] || \
-	error '%s: %s must be under %s or %s\n' \
-		"$prog_name" 'SHARED_OVPN_DIR' 'SHARED_DIR_BASE' 'KEY_DIR' || \
-	exit
+	fatal '%s must be under %s or %s\n' \
+		'SHARED_OVPN_DIR' 'SHARED_DIR_BASE' 'KEY_DIR'
 
 # Cleanup child CAs first
 for child in "$KEY_DIR"/child-*; do

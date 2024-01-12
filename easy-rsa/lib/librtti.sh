@@ -53,7 +53,8 @@ error_exit()
 fatal()
 {
 	local rc=$?
-	error "$@"
+	printf -- '%s: ' "$prog_name"
+	error "$@" ||:
 	exit $rc
 }
 

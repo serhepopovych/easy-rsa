@@ -22,9 +22,18 @@ error()
 	local fmt="${1:?missing 1st arg to ${func}() (<fmt>)}"
 	shift
 
-	printf -- "${fmt}" "$@" >&2
+	printf >&2 -- "${fmt}" "$@"
 
 	return $rc
+}
+
+# Usage: fatal <fmt> ...
+fatal()
+{
+	local rc=$?
+	printf -- '%s: ' "$prog_name"
+	error "$@" ||:
+	exit $rc
 }
 
 ################################################################################
@@ -57,40 +66,31 @@ trap '[ -z "${pk_key_tmp-}" ] || rm -f "${pk_key_tmp}" ||:' EXIT
 pk_key="${1-}"
 
 valid_file "${pk_key}" || \
-	error '%s: no valid private key (pkey) file "%s" found\n' \
-		"${prog_name}" "${pk_key}" || \
-	exit
+	fatal 'no valid private key (pkey) file "%s" found\n' "${pk_key}"
 
 # Make temporary file to output unencrypted private key (pkey)
 pk_key_tmp="${pk_key##*/*}"
 pk_key_tmp="$(mktemp ${pk_key_tmp:+-t} "${pk_key}.XXXXXXXX")" || \
-	error '%s: creating temporary file "%s" to output pkey failed\n' \
-		"${prog_name}" "${pk_key}" || \
-	exit
+	fatal 'creating temporary file "%s" to output pkey failed\n' "${pk_key}"
 
 # Decrypt private key (pkey)
 openssl pkey -in "${pk_key}" -out "${pk_key_tmp}" || \
-	error '%s: decryption pkey with openssl(1) failed\n' \
-		"${prog_name}" || \
-	exit
+	fatal 'decryption pkey with openssl(1) failed\n'
 
 # certificate
 ct_crt="${2-}"
 
 if [ -n "${ct_crt}" ]; then
 	valid_file "${ct_crt}" || \
-		error '%s: no valid certificate file "%s" found\n' \
-			"${prog_name}" "${ct_crt}" || \
-		exit
+		fatal 'no valid certificate file "%s" found\n' "${ct_crt}"
 
 	# Concatenate certificate and private key and print to stdout
 	cat "${ct_crt}" "${pk_key_tmp}"
 else
 	# Replace original private key (pkey) file with new unencrypted one
 	mv -f "${pk_key_tmp}" "${pk_key}" && pk_key_tmp='' || \
-		error '%s: replacing "%s" with "%s" failed\n' \
-			"${prog_name}" "${pk_key}" "${pk_key_tmp}" || \
-		exit
+		fatal 'replacing "%s" with "%s" failed\n' \
+			"${pk_key}" "${pk_key_tmp}"
 fi
 
 exit 0

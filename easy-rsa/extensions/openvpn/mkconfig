@@ -215,17 +215,6 @@ fi
 
 ########################## MAKE OPENVPN CONFIGURATION ##########################
 
-## Define helpers
-
-# Usage: fatal <fmt> ...
-fatal()
-{
-    local rc=$?
-    printf -- '%s: ' "$prog_name"
-    error "$@"
-    exit $rc
-}
-
 ## Define variables
 
 # Set those to confirm with rest of OVPN_* variables
