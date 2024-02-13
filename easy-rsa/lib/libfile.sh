@@ -281,10 +281,15 @@ valid_file()
 
 	local err
 
-	err='is not regular'  && [ ! -f "${file}" ] || \
-	err='is empty'        && [ ! -s "${file}" ] || \
-	err='is not readable' && [ ! -r "${file}" ] || \
+	if [ ! -f "${file}" ]; then
+		err='is not regular'
+	elif [ ! -s "${file}" ]; then
+		err='is empty'
+	elif [ ! -r "${file}" ]; then
+		err='is not readable'
+	else
 		return 0
+	fi
 
 	! : || error '%s: "%s" %s file\n' "${func}" "${file}" "${err}"
 }
