@@ -157,7 +157,7 @@ for_each_passwd()
 
 		[ $u -ge $uid_min -a $u -le $uid_max ] 2>/dev/null || continue
 
-		"$action" "$line" "$@" || return
+		"$action" "$line" "$@" || exit
 	done
 }
 

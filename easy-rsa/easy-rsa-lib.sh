@@ -114,7 +114,7 @@ for_each_user_ca()
 		shift
 
 		local IN_EXEC_CA VARS_DIR
-		local ca u="${line%%:*}" rc=0
+		local ca u="${line%%:*}"
 
 		eval "VARS_DIR=~$u/easy-rsa" && [ -d "$VARS_DIR" ] || continue
 
@@ -131,11 +131,8 @@ for_each_user_ca()
 				"IN_EXEC_CA=$IN_EXEC_CA" \
 				"EASY_RSA=$EASY_RSA" \
 				"VARS_DIR=$VARS_DIR" \
-				-- "$0" "$@" ||
-			rc=$((rc + $?))
+				-- "$0" "$@" ||:
 		done
-
-		return $rc
 	}
 	for_each_passwd '-1' '-1' 'do_exec_ca' "$@"
 }
