@@ -1,6 +1,6 @@
 #!/bin/sh -ue
 
-# Requires: cat(1), sed(1), mv(1), rm(1), mktemp(1), chmod(1), ln(1),
+# Requires: cat(1), sed(1), tr(1), rm(1), mktemp(1), chmod(1), ln(1),
 #           hostname(1), install(1), tar(1)
 
 if [ -z "${IN_EXEC_CA-}" ]; then
@@ -96,9 +96,10 @@ done
 [ $# -eq 1 ] && [ -n "$1" ] || exit
 
 # File Name
-FN="$1"
-
-# Key Common Name (will be picked from $FN by pkitool)
+FN="$(echo "$1" | tr -d -c '[:alnum:]_+-.@')"
+# Key Name
+KEY_NAME="$FN"
+# Key Common Name
 KEY_CN=''
 
 # remote
@@ -211,7 +212,7 @@ YES to reuse: ' "${cs_file##*/}" "${pk_file##*/}"
 else
     reuse=''
 fi
-"$EASY_RSA/build-key" ${OPTS-} "--$OVPN_MODE" "$FN" || exit
+"$EASY_RSA/build-key" ${OPTS-} "--$OVPN_MODE" "$1" || exit
 
 ########################## MAKE OPENVPN CONFIGURATION ##########################
 
