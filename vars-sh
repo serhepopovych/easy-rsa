@@ -7,12 +7,12 @@ inherit 'installsh/vars-sh'
 
 # Install vars
 hostname="${hostname:-easy-rsa}" &&
-if [ -z "${hostname##*[^a-zA-Z0-9._-]*}" ]; then
+if [ -z "${hostname##*[!a-zA-Z0-9._-]*}" ]; then
     echo >&2 "$prog_name: invalid characters in hostname"
     exit 1
 fi
 domain="${domain:-example.net}"
-if [ -z "${domain##*[^a-zA-Z0-9._-]*}" ]; then
+if [ -z "${domain##*[!a-zA-Z0-9._-]*}" ]; then
     echo >&2 "$prog_name: invalid characters in domain"
     exit 1
 fi

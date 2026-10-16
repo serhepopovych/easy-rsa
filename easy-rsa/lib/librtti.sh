@@ -91,7 +91,7 @@ env_call()
 		case "$1" in
 			*=*)
 				n="${1%%=*}"
-				if [ -n "${n##*[^[:alnum:]_]*}" ]; then
+				if [ -n "${n##*[![:alnum:]_]*}" ]; then
 					v="${1#$n=}"
 					[ -z "${v##[\'\"]*}" ] && q='' || q=\'
 					env_vars="${env_vars} $n=$q$v$q"
