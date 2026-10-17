@@ -133,6 +133,8 @@ for_each_user_ca()
 				"VARS_DIR=$VARS_DIR" \
 				-- "$0" "$@" ||:
 		done
+
+		return 0
 	}
 	for_each_passwd '-1' '-1' 'do_exec_ca' "$@"
 }
