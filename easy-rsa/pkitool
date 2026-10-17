@@ -238,7 +238,7 @@ while [ $# -gt 0 ]; do
             # Do not stack extensions so that intermediate CA
             # does not have server extensions and key usage.
         --server)
-            REQ_EXT='-extensions server'
+            REQ_EXT='-extensions v3_req'
             CA_EXT='-extensions server'
             ;;
         --client)
