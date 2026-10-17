@@ -317,18 +317,18 @@ make_copy()
 	local dst="${2:?missing 2d arg to ${func}() (<dst>)}"
 	local umask="${3:-022}"
 
-	local rc=0 oldumask='umask 0022'
+	local rc=0 oldumask='0022'
 
 	src="$(read_link "${src}")" || return
 
-	oldumask="$(umask -p)" && umask "${umask}" && \
+	oldumask="$(umask)" && umask "${umask}" && \
 	{ [ -n "${dst##*/*}" ] || install -d "${dst%/*}"; } && \
 	cat "${src}" >"${dst}" || \
 		error '%s: copy "%s" to "%s" failed\n' \
 			"${func}" "${src}" "${dst}" || \
 	rc=$?
 
-	eval "${oldumask}" ||:
+	umask "${oldumask}" ||:
 
 	return $rc
 }
@@ -342,12 +342,12 @@ safe_copy()
 	local dst="${2:?missing 2d arg to ${func}() (<dst>)}"
 	local umask="${3:-022}"
 
-	local rc=0 oldmask='umask 0022' dst_tmp
+	local rc=0 oldmask='0022' dst_tmp
 
 	src="$(read_link "${src}")" || return
 
 	# use chmod go+r to fix permissions after mktemp(1)
-	oldumask="$(umask -p)" && umask "${umask}" && \
+	oldumask="$(umask)" && umask "${umask}" && \
 	dst_tmp="${dst##*/*}" &&
 	dst_tmp="$(mktemp ${dst_tmp:+--tmpdir} "${dst}.XXXXXXXX")" && \
 	cat "${src}" >"${dst_tmp}" && \
@@ -357,7 +357,7 @@ safe_copy()
 			"${func}" "${src}" "${dst}" || \
 		rc=$? && rm -f "${dst_tmp}" ||:
 
-	eval "${oldumask}" ||:
+	umask "${oldumask}" ||:
 
 	return $rc
 }
