@@ -566,7 +566,7 @@ t="$inst.conf" && ln -sf "$config" "$t" ||
 eval $(
     ossl_x509_get_var \
         "$ca_file" \
-        'SHA256 Fingerprint' \
+        '\(SHA\|sha\)256 Fingerprint' \
         'ca_sha256_fp' \
         -sha256 \
         -fingerprint
