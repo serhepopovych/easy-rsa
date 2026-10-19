@@ -48,7 +48,7 @@ $HTTP["host"] =~ "^@fqdn_regex@(:|$)" {
   var.url_secdl_protpath_regex = url_secdl_ts_regex  + url_secdl_3segs_regex
   var.url_secdl_securl_regex   = url_secdl_mac_regex + url_secdl_protpath_regex
 
-  include_shell vhosts_d + "/xbin/mod/secdownload/uri-prefix ~ var" # url_secdl_uri_prefix
+  include_shell xbin_dir + "/mod/secdownload/uri-prefix ~ var" # url_secdl_uri_prefix
   var.url_prefix_secdl_regex   = url_prefix_regex + url_secdl_uri_prefix + url_secdl_securl_regex
 
 
@@ -117,6 +117,6 @@ $HTTP["host"] =~ "^@fqdn_regex@(:|$)" {
     auth.backend.htdigest.userfile = "/dev/null"
 
     # Include user specific configurations, if any
-    include_shell vhosts_d + "/xbin/users-conf.sh"
+    include_shell xbin_dir + "/users-conf.sh"
   }
 }
