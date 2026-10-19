@@ -107,10 +107,6 @@ $HTTP["host"] =~ "^@fqdn_regex@(:|$)" {
       "Strict-Transport-Security" => "max-age=31536000; includeSubdomains"
     )
 
-    # Per IP connection limit
-    evasive.max-conns-per-ip = 10
-    evasive.silent = "disable"
-
     # Authentication
     auth.backend = "htdigest"
     auth.backend.htdigest.userfile = "/dev/null"
