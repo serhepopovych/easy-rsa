@@ -96,8 +96,7 @@ $HTTP["host"] =~ "^@fqdn_regex@(:|$)" {
       url.redirect = ( "" => "https://${url.authority}${url.path}${qsa}" )
     }
   }
-
-  $HTTP["scheme"] == "https" {
+  else $HTTP["scheme"] == "https" {
     # SSL
     ssl.pemfile = pki_dir + "/cert.pem"
     ssl.privkey = pki_dir + "/privkey.pem" # 1.4.53+
