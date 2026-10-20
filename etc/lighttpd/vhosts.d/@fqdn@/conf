@@ -18,7 +18,7 @@ $HTTP["host"] =~ "^@fqdn_regex@(:|$)" {
 
   var.url_ca_regex        = "([_[:alnum:]]+CA)"
   var.url_path_regex      = "((/[^/]*)*)"
-  var.url_base64c_regex   = "([-_[:alnum:]])"
+  var.url_base64c_regex   = "([[:alnum:]_-])"
   var.url_base64_regex    = "(" + url_base64c_regex + "+)"
   var.url_ts_hex_regex    = "([[:xdigit:]]{8})"
 
@@ -41,9 +41,7 @@ $HTTP["host"] =~ "^@fqdn_regex@(:|$)" {
 
   # Hint: use symlink to `.' reduce to 2 path segments when stored w/o subdir
   var.url_secdl_3segs_regex    = "/" + url_ca_regex + "(/[^/]+){2}"
-  var.secdl_path_segments      = 3
   var.url_secdl_mac_regex      = "/(" + url_base64c_regex + "{43})"
-  var.secdl_algorithm          = "hmac-sha256"
   var.url_secdl_ts_regex       = "/" + url_ts_hex_regex
   var.url_secdl_protpath_regex = url_secdl_ts_regex  + url_secdl_3segs_regex
   var.url_secdl_securl_regex   = url_secdl_mac_regex + url_secdl_protpath_regex
@@ -68,9 +66,8 @@ $HTTP["host"] =~ "^@fqdn_regex@(:|$)" {
   userdir.exclude-user = userdir_exclude_user
 
   # Secure and Fast Downloading
-  secdownload.algorithm     = secdl_algorithm
-  secdownload.path-segments = secdl_path_segments
-  secdownload.hash-querystr = "disable"
+  var.secdl_path_segments = "3"
+  var.secdl_algorithm     = "sha256"
   # secret, document-root, uri-prefix and timeout defined per user
 
   # Access logging
