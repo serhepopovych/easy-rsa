@@ -82,26 +82,8 @@ ossl__hmac()
 
     local secret="${1:?missing 3rd arg to ${func}() (<secret>)}" && shift
 
-    # Note that while standard input is supported it must be used with care
-    # as it may expose plain text message that is being hashed via command
-    # line arguments. For example this could happen in following command
-    #
-    #  echo -n 'plain text' | ossl__hmac '' '' -sha256
-    #
-    # when echo isn't shell builtin but external executable (e.g. /bin/echo).
-
-    # 0 < /dev/stdin - here-document
-    # 1 > /dev/null  - openssl(1) prompt (i.e. "OpenSSL> " w/o double-quotes)
-    # 2 > "$f_out"   - output file (e.g. standard output to next pipe command)
-    # 3 < "$f_in"    - input file (e.g. standard input from prev pipe command)
-    if openssl 3<"$f_in"  2>"$f_out" >/dev/null <<EOF
-dgst $@ -hmac '$secret' -out /dev/fd/2 /dev/fd/3
-EOF
-    then
-        :
-    else
-        return
-    fi
+    # Not safe as $secret is visible to other processes.
+    openssl dgst "$@" -hmac "$secret" -out "$f_out" "$f_in" || return
 }
 
 # Usage: ossl_hmac_sha1() <secret> ...
