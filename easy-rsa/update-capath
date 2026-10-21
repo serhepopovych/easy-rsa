@@ -6,7 +6,7 @@ export PATH='/sbin:/usr/sbin:/bin:/usr/bin'
 # This going to be run periodically (e.g. using crond(8)).
 
 # Requires: awk(1), sed(1), tr(1), cat(1), mv(1), rm(1), chmod(1),
-#           mktemp(1), install(1), curl(1), cmp(1), c_rehash(1)
+#           mktemp(1), install(1), curl(1), cmp(1), c_rehash(1), nc.openbsd(1)
 
 # CA files we updating
 CA_FILES='ca.crt crl.pem'
@@ -55,9 +55,21 @@ on_success()
 		#
 		#  systemctl restart "openvpn-server@${instance}" ||:
 		#
-		# Restart OpenVPN server to force client reconnects
-		# to check their certificates against updated CRL:
-		:
+		# Kill client (disconnect with explicit-exit-notify sent) to
+		# force client reconnects to check their certificates against
+		# updated CRLs.
+
+		local sock="/run/openvpn-server/$instance.sock"
+		[ -S "$sock" ] || continue
+
+		local client_kill="$(
+			echo 'status' |
+			nc.openbsd -q 0 -U "$sock" |
+			awk -F',' '$1 == "CLIENT_LIST" {print "client-kill " $11}'
+		)"
+		[ -n "$client_kill" ] || continue
+
+		echo "$client_kill" | nc.openbsd -q 0 -U "$sock" >/dev/null
 	done
 }
 
