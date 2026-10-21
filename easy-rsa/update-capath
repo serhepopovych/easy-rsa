@@ -72,7 +72,7 @@ prog_name="${0##*/}"
 # Usage: unmake_bundle <dir> <file> <bundle>
 unmake_bundle()
 {
-	local func="${FUNCNAME:-pop_dir}"
+	local func="${FUNCNAME:-unmake_bundle}"
 
 	local dir="${1:?missing 1st arg to ${func}() (<dir>)}"
 	local file="${2:?missing 2d arg to ${func}() (<file>)}"
