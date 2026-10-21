@@ -6,7 +6,7 @@ export PATH='/sbin:/usr/sbin:/bin:/usr/bin'
 # This going to be run periodically (e.g. using crond(8)).
 
 # Requires: awk(1), sed(1), tr(1), cat(1), mv(1), rm(1), chmod(1),
-#           mktemp(1), install(1), wget(1), cmp(1), c_rehash(1)
+#           mktemp(1), install(1), curl(1), cmp(1), c_rehash(1)
 
 # CA files we updating
 CA_FILES='ca.crt crl.pem'
@@ -21,20 +21,19 @@ CA_FILES='ca.crt crl.pem'
 #%CA%_URL='%CA_URL%'
 #%CA%_PATH='%CA_PATH%'
 
-# Add any security sensitive options (e.g. --http-user and
-# --http-password) using ~/.wgetrc or ~/.netrc.
+# Add any security sensitive options (e.g. --user) using ~/.curlrc
+# or ~/.netrc (needs --netrc or --netrc-optional).
 #
-# If CA data served using HTTPS with certificate issued by
-# own CA (e.g. one whose data is served) you should install
-# that CA certificates chain to system wide location or
-# use --ca-certificate or --ca-directory options to tell
-# wget(1) about that CA(s).
+# If CA data served using HTTPS with certificate issued by own CA
+# (e.g. one whose data is served) you should install that CA
+# certificates chain to system wide location or use --cadir or
+# --capath options to tell curl(1) about that CA(s).
 #
-# It is not recommended to use --no-check-certificate in
-# production environments too.
+# It is not recommended to use --insecure in production
+# environments too.
 #
-# See wget(1) for more information on available options.
-WGET_OPTS='--quiet --tries=5 --timeout=30 --prefer-family=IPv4'
+# See curl(1) for more information on available options.
+CURL_OPTS='--silent --retry 5 --connect-timeout 30'
 
 # Event handlers
 
@@ -185,7 +184,7 @@ do_update_capath()
 			f_tmp="${tmp_path}/bundle/${f}"
 
 			# Fetch file
-			wget ${WGET_OPTS} -O "${f_tmp}" "${url}/${f}" || rc=$?
+			curl ${CURL_OPTS} -o "${f_tmp}" "${url}/${f}" || rc=$?
 			[ $rc -eq 0 ] || break
 
 			# At least one bundle updated
