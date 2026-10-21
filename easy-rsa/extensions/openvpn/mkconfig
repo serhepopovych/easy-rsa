@@ -675,7 +675,7 @@ EOF
     fi
 
     # convert profile from UNIX (LN) to DOS/Windowz (LN+CR)
-    sed -e "s|\$|$(echo -e '\r')|" -i "$profile" ||
+    sed -e "s|\$|$(printf '\r')|" -i "$profile" ||
         fatal 'converting profile ("%s") file with sed(1) failed\n' "$profile"
 fi # [ "$OVPN_MODE" = 'client' ]
 
