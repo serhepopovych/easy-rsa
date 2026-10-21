@@ -40,7 +40,10 @@ CURL_OPTS='--silent --retry 5 --connect-timeout 30'
 # Usage: on_success <ca> <url> <path>
 on_success()
 {
-	local instance instances
+	# No changes in CRLs (i.e. no new certificates revoked)?
+	[ -n "${update-}" ] || return 0
+
+	local instance instances=''
 
 	case "$1" in
 		%ca%) instances="${instances} %ca%" ;;
@@ -157,6 +160,49 @@ here since they will be lost on next "${prog_name}" run.
 EOF
 }
 
+# Usage: same_crl <dir1> <dir2>
+same_crl()
+{
+	local func="${FUNCNAME:-same_crl}"
+
+	local dir1="${1:?missing 1st arg to ${func}() (<dir1>)}"
+	local dir2="${2:?missing 2d arg to ${func}() (<dir2>)}"
+
+	local serial1
+	local serial2
+
+	# Usage: compare_symlinks <d1> <d2>
+	compare_symlinks()
+	{
+		local r
+		for r in "$1"/*.r*; do
+			[ -L "$r" -a -f "$r" ] || continue
+			r="$2/${r##*/}"
+			[ -L "$r" -a -f "$r" ] || return
+		done
+	}
+	compare_symlinks "$dir1" "$dir2" || return
+	compare_symlinks "$dir2" "$dir1" || return
+
+	# Usage: read_serial <dir>
+	read_serial()
+	{
+		local r out
+		for r in "$1"/*.r*; do
+			# Try to read first ...
+			out="$(openssl crl -noout -text -in "$r")" || return
+			# ... and then extract serial number(s)
+			sed -n -e "s,^\s*Serial Number:\s*\(.\+\)\s*$,${r##*/}:\1,p" <<-EOF
+				$out
+			EOF
+		done
+	}
+	serial1="$(read_serial "$dir1")" || return
+	serial2="$(read_serial "$dir2")" || return
+
+	[ "$serial1" = "$serial2" ] || return
+}
+
 # Usage: do_update_capath <ca> <url> <path> <files...>
 do_update_capath()
 {
@@ -215,24 +261,44 @@ do_update_capath()
 	fi
 
 	if [ -n "${updated}" ]; then
+		local orig_path=''
+
 		# Move original directory to temporary one, if exists
-		[ ! -d "${path}" ] || mv -f "${path}" "${tmp_path}" || rc=$?
+		if [ -d "${path}" ]; then
+			mv -f "${path}" "${tmp_path}" &&
+			orig_path="${tmp_path}/${path##*/}" || rc=$?
+		fi
 
 		if [ $rc -eq 0 ]; then
 			# Rename temporary directory to original
-			mv -f "${tmp_path}" "${path}" &&
-			chmod -f a+rx "${path}" || rc=$?
+			if chmod -f a+rx "${tmp_path}" &&
+			   mv -f "${tmp_path}" "${path}"
+			then
+				if [ -n "${orig_path}" ]; then
+					orig_path="${path}/${path##*/}"
 
-			if [ $rc -eq 0 ]; then
-				# Remove old original on success
-				rm -rf "${path}/${path##*/}/" ||:
+					# Compare CRL to hint on_success()
+					if same_crl "$orig_path" "$path"; then
+						update=''
+					fi
+
+					# Remove old original on success
+					rm -rf "${orig_path}" ||:
+				fi
+
 				# Add README with notes on contents volatility
 				make_readme "${path}" ||:
+
 				# Trigger 'on success' event
 				on_success "${ca}" "${url}" "${path}" ||:
 			else
-				# Restore old original on failure
-				mv -f "${tmp_path}/${path##*/}" "${path}" ||:
+				rc=$?
+
+				if [ -n "${orig_path}" ]; then
+					# Restore old original on failure
+					mv -f "${orig_path}" "${path}" ||:
+				fi
+
 				# Trigger 'on failure' event
 				on_failure "${ca}" "${url}" "${path}" ||:
 			fi
