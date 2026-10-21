@@ -372,7 +372,7 @@ _EOF
     # ... and it's crontab file
     if t="$t.crontab" && cat >"$t" <<EOF
 # Periodically pull CA and CRL bundles and update OpenVPN CApath directory.
-*/5 * * * * root ${t%.crontab}
+*/5 * * * * root ${t%.crontab} >/dev/null
 EOF
     then
         :
