@@ -6,7 +6,7 @@ export PATH='/sbin:/usr/sbin:/bin:/usr/bin'
 # This going to be run periodically (e.g. using crond(8)).
 
 # Requires: awk(1), sed(1), tr(1), cat(1), mv(1), rm(1), chmod(1),
-#           mktemp(1), install(1), curl(1), cmp(1), c_rehash(1), nc.openbsd(1)
+#           mktemp(1), install(1), curl(1), cmp(1), c_rehash(1), netcat(openbsd)
 
 # CA files we updating
 CA_FILES='ca.crt crl.pem'
@@ -64,12 +64,12 @@ on_success()
 
 		local client_kill="$(
 			echo 'status' |
-			nc.openbsd -q 0 -U "$sock" |
+			netcat -N -U "$sock" |
 			awk -F',' '$1 == "CLIENT_LIST" {print "client-kill " $11}'
 		)"
 		[ -n "$client_kill" ] || continue
 
-		echo "$client_kill" | nc.openbsd -q 0 -U "$sock" >/dev/null
+		echo "$client_kill" | netcat -N -U "$sock" >/dev/null
 	done
 }
 
