@@ -50,6 +50,34 @@ on_success()
 		*) return ;;
 	esac
 
+	# Usage: netcat ...
+	netcat()
+	{
+		if [ -n "${netcat__cmd-}" ]; then
+			$netcat__cmd "$@" || return
+		else
+			while :; do
+				local arg
+				for arg in "$@"; do
+					[ -n "${arg##-U*}" ] || break 2
+				done
+				fatal 'nc(1) missing -U option to netcat()\n'
+			done
+
+			# Usage: nc ...
+			nc() { command nc "$@" >/dev/null 2>&1 || return; }
+
+			{ echo | nc -N   "$@" && netcat__cmd='nc -N  '; } ||
+			{ echo | nc -q 0 "$@" && netcat__cmd='nc -q 0'; } ||
+				fatal 'nc(1) does not support -N and -q 0 or -U\n'
+
+			unset -f nc
+
+			netcat "$@"
+		fi
+	}
+	local netcat__cmd=''
+
 	for instance in ${instances}; do
 		# Example for OpenVPN server:
 		#
@@ -64,13 +92,15 @@ on_success()
 
 		local client_kill="$(
 			echo 'status' |
-			netcat -N -U "$sock" |
+			netcat -U "$sock" |
 			awk -F',' '$1 == "CLIENT_LIST" {print "client-kill " $11}'
 		)"
 		[ -n "$client_kill" ] || continue
 
-		echo "$client_kill" | netcat -N -U "$sock" >/dev/null
+		echo "$client_kill" | netcat -U "$sock" >/dev/null
 	done
+
+	unset -f netcat
 }
 
 # Usage: on_failure <ca> <url> <path>
@@ -83,6 +113,30 @@ on_failure()
 
 # Program (script) name
 prog_name="${0##*/}"
+
+# Usage: error <fmt> ...
+error()
+{
+	local rc=$?
+
+	local func="${FUNCNAME:-error}"
+
+	local fmt="${1:?missing 1st arg to ${func}() (<fmt>)}"
+	shift
+
+	printf >&2 -- "${fmt}" "$@"
+
+	return $rc
+}
+
+# Usage: fatal <fmt> ...
+fatal()
+{
+	local rc=$?
+	printf -- '%s: ' "$prog_name"
+	error "$@" ||:
+	exit $rc
+}
 
 # Usage: unmake_bundle <dir> <file> <bundle>
 unmake_bundle()
